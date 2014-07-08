@@ -1,0 +1,12 @@
+[package]
+
+name = "rust-asn1"
+version = "0.0.0"
+readme = "README.md"
+authors = ["Daniel Hackney <dan@haxney.org>"]
+tags = []
+
+[[lib]]
+
+name = "rust-asn1"
+path = "src/lib.rs"
