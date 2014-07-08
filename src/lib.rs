@@ -2,3 +2,7 @@
 #![deny(missing_doc)]
 
 //! Documentation goes here.
+
+#![feature(phase)]
+
+pub mod parser;
