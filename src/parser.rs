@@ -34,6 +34,7 @@ peg! asn1_grammar(r#"
 
 use super::{RealNumber, bstring_to_bitv};
 use std::collections::bitv::Bitv;
+use std::str;
 
 digit = [0-9]
 digits = digit+
@@ -67,7 +68,10 @@ reserved_word = "ABSENT" / "ENCODED" / "INTERSECTION" / "SEQUENCE"
 newline = [\n\x0B\x0C\r]
 
 // Section 12.1.6
-whitespace = [\t ] / newline
+
+spacing = [\t ]
+
+whitespace = spacing / newline
 
 // Section 12.2
 #[export]
@@ -132,13 +136,76 @@ bstring -> Bitv
 // Section 12.11
 xmlbstring -> Bitv
   = bs:bstring_char* { bstring_to_bitv(bs) }
+
+// Section 12.12
+hstring_char -> Option<char>
+  = ([A-F0-9] / whitespace) {{
+                  let c = match_str.char_at(0);
+                  if c.is_whitespace() {
+                    None
+                  } else {
+                    Some(c)
+                  }
+  }}
+
+hstring -> String
+  = "'" hs:hstring_char* "'H" { hs.iter().filter_map(|x| *x).collect() }
+
+// Section 12.13
+xmlhstring_char -> Option<char>
+  = ([a-fA-F0-9] / whitespace) {{
+                  let c = match_str.char_at(0).to_uppercase();
+                  if c.is_whitespace() {
+                    None
+                  } else {
+                    Some(c)
+                  }
+  }}
+
+xmlhstring -> String
+  = hs:xmlhstring_char* { hs.iter().filter_map(|x| *x).collect() }
+
+
+cstring_char -> char
+  = (!("\"" / newline) . / '""') {
+                  if match_str.len() == 1 {
+                    match_str.char_at(0)
+                  } else {
+                    '\x22' // Double quote
+                  }
+  }
+
+cstring_basic -> String
+  = cs:cstring_char* { cs.move_iter().collect() }
+
+#[export]
+// Section 12.14
+//
+// Yes, this is complex. Don't blame me! The spec calls for stripping spacing
+// characters before and after newlines, but allowing them at the beginning and
+// end of the string.
+cstring -> String
+  = "\"" cs:cstring_basic "\"" { cs }
+
+  // Multi-line string. Always has at least one string in `lines` and one in
+  // `tail`. If I were more clever, I could figure out a way to do most of this
+  // within the PEG expressions.
+  / "\"" lines:(cs:cstring_basic newline {cs})+ tail:cstring_basic "\"" {{
+                  let mut mlines = lines.clone();
+                  let head = mlines.shift().unwrap();
+                  for line in mlines.mut_iter() {
+                    *line = line.as_slice().trim().to_string();
+                  }
+                  mlines.unshift(head.as_slice().trim_right().to_string());
+                  mlines.append_one(tail.as_slice().trim_left().to_string()).concat()
+  }}
 "#)
 
 
 #[cfg(test)]
 mod tests {
     use super::asn1_grammar::{typereference, valuereference, comment,
-                              realnumber, bstring};
+                              realnumber, bstring, cstring};
     use super::RealNumber;
     use std::collections::bitv::Bitv;
 
@@ -250,5 +317,16 @@ mod tests {
         assert!(bstring("'010' B").is_err());
         assert!(bstring("'0 1\t0\n'b").is_err());
         assert!(bstring("'0 1\t0\n' B").is_err());
+    }
+
+    #[test]
+    pub fn test_cstring() {
+        assert_eq!(cstring(r#""""#), Ok("".to_string()));
+        assert_eq!(cstring(r#""a""#), Ok("a".to_string()));
+        assert_eq!(cstring(r#""s""t""#), Ok("s\"t".to_string()));
+        assert_eq!(cstring("\"ABCDE FGH\nIJK\"\"XYZ\""),
+                   Ok("ABCDE FGHIJK\"XYZ".to_string()));
+        assert_eq!(cstring("\"A\tB \n C\n D\t\""),
+                   Ok("A\tBCD\t".to_string()));
     }
 }
