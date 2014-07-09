@@ -3,6 +3,8 @@
  *
  */
 
+#![allow(dead_code)] // Until parser is complete. Too noisy otherwise
+
 #[phase(plugin)]
 extern crate peg_syntax_ext;
 
