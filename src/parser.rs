@@ -6,6 +6,9 @@
 #[phase(plugin)]
 extern crate peg_syntax_ext;
 
+extern crate collections;
+use std::collections::bitv::Bitv;
+
 #[deriving(Clone, PartialEq, Eq, Show)]
 struct RealNumber {
     int_part: uint,
@@ -13,12 +16,22 @@ struct RealNumber {
     exponent: Option<int>,
 }
 
+fn bstring_to_bitv(bs: Vec<char>) -> Bitv {
+    bs.iter().filter_map(|&x| match x {
+        '0' => Some(false),
+        '1' => Some(true),
+        _ => None,
+    }).collect()
+}
+
 peg! asn1_grammar(r#"
 {
   use super::RealNumber;
+  use std::collections::bitv::Bitv;
 }
 
-use super::RealNumber;
+use super::{RealNumber, bstring_to_bitv};
+use std::collections::bitv::Bitv;
 
 digit = [0-9]
 digits = digit+
@@ -104,14 +117,28 @@ realnumber -> RealNumber
     e:([eE] sn:signed_number { sn } )? {
                   RealNumber { int_part: n, frac_part: f, exponent: e}
     }
+
+// Sort of a hack to get individual characters
+bstring_char -> char
+  = ("0" / "1" / whitespace) { match_str.char_at(0) }
+
+// Section 12.10
+#[export]
+bstring -> Bitv
+  = "'" bs:bstring_char* "'B" { bstring_to_bitv(bs) }
+
+// Section 12.11
+xmlbstring -> Bitv
+  = bs:bstring_char* { bstring_to_bitv(bs) }
 "#)
 
 
 #[cfg(test)]
 mod tests {
     use super::asn1_grammar::{typereference, valuereference, comment,
-                              realnumber};
+                              realnumber, bstring};
     use super::RealNumber;
+    use std::collections::bitv::Bitv;
 
     #[test]
     pub fn test_typereference() {
@@ -206,5 +233,20 @@ mod tests {
 
         // Leading zero in exponent
         assert!(realnumber("1.1E-03").is_err());
+    }
+
+    #[test]
+    pub fn test_bstring() {
+        assert_eq!(bstring("'000'B"), Ok(Bitv::with_capacity(3, false)));
+        assert_eq!(bstring("''B"), Ok(Bitv::new()));
+
+        let expected: Bitv = vec![false, true, false].iter().map(|n| *n).collect();
+        let expect_ok = Ok(expected);
+        assert_eq!(bstring("'010'B"), expect_ok);
+        assert_eq!(bstring("'0 1\t0\n'B"), expect_ok);
+
+        assert!(bstring("'010' B").is_err());
+        assert!(bstring("'0 1\t0\n'b").is_err());
+        assert!(bstring("'0 1\t0\n' B").is_err());
     }
 }
