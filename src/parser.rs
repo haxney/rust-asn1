@@ -26,13 +26,94 @@ fn bstring_to_bitv(bs: Vec<char>) -> Bitv {
     }).collect()
 }
 
+pub struct ModuleDefinition {
+    identifier: ModuleIdentifier,
+    enc_ref: EncodingReference,
+    tag: Tag,
+    extension: bool,
+    body: Option<ModuleBody>,
+    enc_controls: Vec<EncodingControl>
+}
+
+pub enum DefinitiveIdentification {
+    DefinitiveOID(Vec<DefinitiveObjId>),
+    DefinitiveOIDandIRI(Vec<DefinitiveOI>, Vec<ArcIdentifier>)
+}
+
+pub enum DefinitiveObjIdComponent {
+    NameForm(String),
+    DefinitiveNumberForm(uint),
+    DefinitiveNameAndNumberForm(String, uint)
+}
+
+pub enum Tag {
+    ExplicitTag,
+    ImplicitTag,
+    AutomaticTag
+}
+
+pub struct ModuleBody {
+    exports: Option<Exports>,
+    imports: Option<Imports>,
+    assignments: Vec<Assignment>
+}
+
+pub enum Exports {
+    SymbolsExported(Vec<Symbol>),
+    AllExported
+}
+
+pub enum Imports {
+    SymbolsImported(Vec<SymbolsFromModule>)
+}
+
+pub struct SymbolsFromModule {
+    symbols: Vec<Symbol>,
+    module: GlobalModuleReference
+}
+
+pub struct GlobalModuleReference {
+    module_ref: String,
+    assigned_id: Option<AssignedIdentifier>
+}
+
+pub enum AssignedIdentifier {
+    ObjectIdentifierValue,
+    DefinedValue
+}
+
+pub enum Symbol {
+    ReferenceSymbol(Reference),
+    ParameterizedReferenceSymbol
+}
+
+pub enum Reference {
+    TypeReference(String),
+    ValueReference(String),
+    ObjectClassReference(String),
+    ObjectReference(String),
+    ObjectSetReference(String)
+}
+
+pub enum Assignment {
+    TypeAssignment,
+    ValueAssignment,
+    XMLValueAssignment,
+    ValueSetTypeAssignment,
+    ObjectClassAssignment,
+    ObjectAssignment,
+    ObjectSetAssignment,
+    ParameterizedAssignment
+
+}
+
 peg! asn1_grammar(r#"
 {
-  use super::RealNumber;
+  use super::{RealNumber, ModuleDefinition};
   use std::collections::bitv::Bitv;
 }
 
-use super::{RealNumber, bstring_to_bitv};
+use super::{RealNumber, bstring_to_bitv, ModuleDefinition};
 use std::collections::bitv::Bitv;
 use std::str;
 
@@ -72,6 +153,8 @@ newline = [\n\x0B\x0C\r]
 spacing = [\t ]
 
 whitespace = spacing / newline
+
+__ = whitespace*
 
 // Section 12.2
 #[export]
@@ -199,6 +282,238 @@ cstring -> String
                   mlines.unshift(head.as_slice().trim_right().to_string());
                   mlines.append_one(tail.as_slice().trim_left().to_string()).concat()
   }}
+
+// Section 12.15
+// TODO: xmlcstring
+
+// Section 12.16
+// TODO: simplestring
+
+// Section 12.17
+// TODO: tstring
+// Oh god, it's horrible. It makes me want to re-think this whole endeavor.
+
+// Section 12.18
+// TODO: xmltstring
+
+// Section 12.19
+psname -> String
+  = [A-Z] ("-"? [a-zA-Z0-9])* { match_str.to_string() }
+
+// Section 12.20
+asgn = "::="
+
+// Section 12.21
+range = ".."
+
+// Section 12.22
+ellipsis = "..."
+
+// Section 12.23
+lversion_brack = "[["
+
+// Section 12.24
+rversion_brack = "]]"
+
+// Section 12.25
+encodingreference -> String
+  = [A-Z] ("-"? [A-Z0-9])* { match_str.to_string() }
+
+// Section 12.26
+integerUnicodeLabel -> uint
+  = number
+
+// Intentionally does not include HYPHEN MINUS
+non_int_uni_label
+  = [._~0-9A-Za-z]
+                  / [\u00A0-\uDFFE]
+                  / [\uF900-\uFDCF]
+                  / [\uFDF0-\uFFEF]
+                  / [\U00010000-\U0001FFFD]
+                  / [\U00020000-\U0002FFFD]
+                  / [U00030000-\U0003FFFD]
+                  / [U00040000-\U0004FFFD]
+                  / [U00050000-\U0005FFFD]
+                  / [U00060000-\U0006FFFD]
+                  / [U00070000-\U0007FFFD]
+                  / [U00080000-\U0008FFFD]
+                  / [U00090000-\U0009FFFD]
+                  / [U000A0000-\U000AFFFD]
+                  / [U000B0000-\U000BFFFD]
+                  / [U000C0000-\U000CFFFD]
+                  / [U000D0000-\U000DFFFD]
+                  / [U000E1000-\U000EFFFD]
+
+// Section 12.27
+// References X.660 Section 7.5
+
+// This does not quite match the rules. It is overly permissive in that it
+// allows digit-only strings, which the spec says are forbidden.
+non_integerUnicodeLabel -> String
+  = non_int_uni_label ("-"? non_int_uni_label)* { match_str.to_string() }
+
+// Section 12.28
+xml_end_tag_start = "</"
+
+// Section 12.29
+xml_single_tag_end = "/>"
+
+// Section 12.30
+xml_true -> bool
+  = "true" { true }
+
+// Section 12.31
+xml_xtrue -> bool
+  = "true" / "1" { true }
+
+// Section 12.32
+xml_false -> bool
+  = "false" { false }
+
+// Section 12.33
+xml_xfalse -> bool
+  = "false" / "0" { false }
+
+// Section 12.34
+// TODO: xml_nan
+
+// Section 12.35
+// TODO: xml_inf
+
+// Section 13.1
+#[export]
+ModuleDefinition -> ModuleDefinition
+  = mi:ModuleIdentifier __
+    "DEFINITIONS" __
+    er:EncodingReference? __
+    tag:Tag? __
+    ext:ExtensionDefault
+    "::=" __
+    "BEGIN" __
+    mb: ModuleBody? __
+    ecs:EncodingControlSection* __
+    "END" {
+                  ModuleDefinition { identifier: mi,
+                    enc_ref: er,
+                    tag: tag,
+                    extension: ext,
+                    body: mb,
+                    enc_controls: ecs
+                  }
+    }
+
+ModuleIdentifier -> ModuleIdentifier
+  = mr:modulereference __ di:DefinitiveIdentification? {
+                  ModuleIdentifier {
+                    mod_ref: mr,
+                    def_id: di
+                  }
+  }
+
+DefinitiveIdentification -> DefinitiveIdentification
+  = doid:DefinitiveOID { DefinitiveOID(doid) }
+  / doai:DefinitiveOIDandIRI { doai }
+
+DefinitiveOID -> Vec<DefinitiveObjId>
+  = "{" __ cl:DefinitiveObjIdComponent* __ "}" { cl }
+
+DefinitiveOIDandIRI -> DefinitiveOIDandIRI
+  = doid:DefinitiveOID __ iri:IRIValue { DefinitiveOIDandIRI(doid, iri) }
+
+DefinitiveObjIdComponent -> DefinitiveObjIdComponent
+  = nf:NameForm { NameForm(nf) }
+  / dnf:DefinitiveNumberForm { DefinitiveNumberForm(dnf) }
+  / dnanf:DefinitiveNameAndNumberForm {{
+                  let (name, num) = dnanf;
+                  DefinitiveNameAndNumberForm(name, num)
+  }}
+
+DefinitiveNumberForm -> uint
+  = n:number { n }
+
+DefinitiveNameAndNumberForm -> (String, uint)
+  = id:identifier __ "(" __ dnf:DefinitiveNumberForm __ ")" {
+                  (id, dnf)
+  }
+
+// `EncodingReferenceDefault` from spec
+EncodingReference -> String
+  = er:encodingreference __ "INSTRUCTIONS" { er }
+
+// `TagDefault` from spec
+Tag -> Tag
+  = "EXPLICIT" __ "TAGS" { ExplicitTag}
+  / "IMPLICIT" __ "TAGS" { ImplicitTag }
+  / "AUTOMATIC" __ "TAGS" { AutomaticTag }
+
+ExtensionDefault -> bool
+  = "EXTENSIBILITY" __ "IMPLIED" { true }
+  / "" { false }
+
+ModuleBody -> ModuleBody
+  = ex:Exports __ im:Imports __ al:AssignmentList {
+                  ModuleBody {
+                    exports: ex,
+                    imports: im,
+                    assignments: al
+                  }
+  }
+
+Exports -> Option<Exports>
+  = "EXPORTS" __ sl:SymbolList __ ";" { Some(SymbolsExported(sl)) }
+  / "EXPORTS" __ "ALL" __ ";" { Some(AllExported) }
+  / "" { None }
+
+Imports -> Option<Imports>
+  = "IMPORTS" __ si:SymbolsFromModule* __ ";" { Some(SymbolsImported(si)) }
+  / "" { None }
+
+SymbolsFromModule -> SymbolsFromModule
+  = sl:SymbolList __ "FROM" __ gmr: GlobalModuleReference {
+                  SymbolsFromModule{ symbols: sl, module: gmr }
+  }
+
+GlobalModuleReference -> GlobalModuleReference
+  = mr:modulereference __ ai:AssignedIdentifier {
+                  GlobalModuleReference {
+                    module_ref: mr,
+                    assigned_id: ai
+                  }
+  }
+
+AssignedIdentifier -> Option<AssignedIdentifier>
+  = oiv:ObjectIdentifierValue { Some(ObjectIdentifierValue(oiv)) }
+  / dv:DefinedValue { Some(DefinedValue(dv)) }
+  / "" { None }
+
+SymbolList -> Vec<Symbol>
+  = s:Symbol { vec![s] }
+  / head:Symbol rest:("," __ s:Symbol { s }) {{
+                  rest.unshift(head);
+                  rest
+  }}
+
+Symbol -> Symbol
+  = r:Reference { ReferenceSymbol(r) }
+  / pr:ParameterizedReference { ParameterizedReferenceSymbol(pr) }
+
+Reference -> Reference
+  = typereference
+  / valuereference
+  / objectclassreference
+  / objectreference
+  / objectsetreference
+
+Assignment -> Assignment
+  = TypeAssignment
+  / ValueAssignment
+  / XMLValueAssignment
+  / ValueSetTypeAssignment
+  / ObjectClassAssignment
+  / ObjectAssignment
+  / ObjectSetAssignment
+  / ParameterizedAssignment
+
 "#)
 
 
