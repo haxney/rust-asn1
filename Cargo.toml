@@ -1,12 +1,12 @@
 [package]
 
-name = "rust-asn1"
+name = "asn1"
 version = "0.0.0"
 authors = ["Daniel Hackney <dan@haxney.org>"]
 
 [[lib]]
 
-name = "rust-asn1"
+name = "asn1"
 path = "src/lib.rs"
 
 [dependencies.peg]
