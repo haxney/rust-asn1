@@ -32,59 +32,69 @@ pub struct ModuleDefinition {
     tag: Tag,
     extension: bool,
     body: Option<ModuleBody>,
-    enc_controls: Vec<EncodingControl>
+    enc_controls: Vec<EncodingControl>,
+}
+
+pub enum ModuleIdentifier {
+    ModuleReference(String),
+    DefinitiveIdent(Option<DefinitiveIdentification>),
 }
 
 pub enum DefinitiveIdentification {
-    DefinitiveOID(Vec<DefinitiveObjId>),
-    DefinitiveOIDandIRI(Vec<DefinitiveOI>, Vec<ArcIdentifier>)
+    DefinitiveOID(Vec<DefinitiveObjIdComponent>),
+    DefinitiveOIDandIRI(Vec<DefinitiveOI>, Vec<ArcIdentifier>),
+}
+
+pub enum ArcIdentifier {
+    IntegerArc(uint),
+    NonIntArc(String),
 }
 
 pub enum DefinitiveObjIdComponent {
     NameForm(String),
     DefinitiveNumberForm(uint),
-    DefinitiveNameAndNumberForm(String, uint)
+    DefinitiveNameAndNumberForm(String, uint),
 }
 
 pub enum Tag {
     ExplicitTag,
     ImplicitTag,
-    AutomaticTag
+    AutomaticTag,
 }
 
 pub struct ModuleBody {
     exports: Option<Exports>,
     imports: Option<Imports>,
-    assignments: Vec<Assignment>
+    assignments: Vec<Assignment>,
 }
 
 pub enum Exports {
     SymbolsExported(Vec<Symbol>),
-    AllExported
+    AllExported,
 }
 
 pub enum Imports {
-    SymbolsImported(Vec<SymbolsFromModule>)
+    SymbolsImported(Vec<SymbolsFromModule>),
 }
 
 pub struct SymbolsFromModule {
     symbols: Vec<Symbol>,
-    module: GlobalModuleReference
+    module: GlobalModuleReference,
 }
 
 pub struct GlobalModuleReference {
     module_ref: String,
-    assigned_id: Option<AssignedIdentifier>
+    assigned_id: Option<AssignedIdentifier>,
 }
 
 pub enum AssignedIdentifier {
     ObjectIdentifierValue,
-    DefinedValue
+    DefinedValue,
 }
 
 pub enum Symbol {
     ReferenceSymbol(Reference),
-    ParameterizedReferenceSymbol
+    ParameterizedReferenceSymbol,
 }
 
 pub enum Reference {
@@ -92,7 +102,7 @@ pub enum Reference {
     ValueReference(String),
     ObjectClassReference(String),
     ObjectReference(String),
-    ObjectSetReference(String)
+    ObjectSetReference(String),
 }
 
 pub enum Assignment {
@@ -103,7 +113,7 @@ pub enum Assignment {
     ObjectClassAssignment,
     ObjectAssignment,
     ObjectSetAssignment,
-    ParameterizedAssignment
+    ParameterizedAssignment,
 
 }
 

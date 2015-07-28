@@ -1,9 +1,9 @@
 {
-  use super::{RealNumber, ModuleDefinition};
+  use parser::{RealNumber, ModuleDefinition};
   use std::collections::bitv::Bitv;
 }
 
-use super::{RealNumber, bstring_to_bitv, ModuleDefinition};
+use parser::{RealNumber, bstring_to_bitv, ModuleDefinition};
 use std::collections::bitv::Bitv;
 use std::str;
 
