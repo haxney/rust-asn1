@@ -8,7 +8,7 @@ extern crate nom;
 extern crate regex;
 
 use std::str::FromStr;
-use nom::{IResult};
+use nom::{IResult, Needed};
 
 /// Returns `true` if the character is a newline character according to ASN.1.
 ///
@@ -114,12 +114,123 @@ named!(single_line_comment<&str, &str>,
     )
 );
 
+fn offset<T: AsRef<[u8]>>(base: T, sub: T) -> usize {
+    let fst = base.as_ref().as_ptr();
+    let snd = sub.as_ref().as_ptr();
+
+    snd as usize - fst as usize
+}
+
+/// Version of `recognize!` macro that can be used for strings.
+macro_rules! recognize_s (
+  ($i:expr, $submac:ident!( $($args:tt)* )) => (
+    {
+      use ::nom::IResult;
+      match $submac!($i, $($args)*) {
+        IResult::Done(i,_) => {
+          let index = offset($i, i);
+          println!("dollar input: '{:?}', index: {}", $i, index);
+          IResult::Done(i, &($i)[..index])
+        },
+        IResult::Error(e)      => return IResult::Error(e),
+        IResult::Incomplete(i) => return IResult::Incomplete(i)
+      }
+    }
+  );
+  ($i:expr, $f:expr) => (
+    recognize_s!($i, call!($f))
+  );
+);
+
+/// Parse a multi-line comment. Multi-line comments in ASN.1 can be nested arbitrarily, so the
+/// following is a valid comment:
+///
+/// ```notrust
+/// /* Outer
+///  * /* Inner */
+///  * Still a comment
+///  */
+/// ```
+///
+/// Multi-line comments must be closed. If the end of the file is reached before the closing tag is
+/// found, this is an error.
+///
+/// Defined in X.680 §12.6b
+fn multi_line_comment(input: &str) -> IResult<&str, &str> {
+    let mut offset = input.len();
+
+    let (inside_comment, _) = try_parse!(input, tag_s!("/*"));
+    let mut chars = inside_comment.char_indices().peekable();
+
+    // The previous `try_parse!` has already consumed an opening tag, so the beginning nesting
+    // level is 1.
+    let mut nest_level: u32 = 1;
+    loop {
+        let next_char = chars.next();
+        println!("next_char: '{:?}'", next_char);
+        match next_char {
+            Some((i, c)) => {
+                match c {
+                    '/' => {
+                        match chars.peek() {
+                            Some(&(_, pc)) => {
+                                if pc == '*' {
+                                    nest_level += 1;
+                                } else {
+                                    continue;
+                                }
+                            },
+                            // Got a single "/" at the end of the string. This is a parse error, as
+                            // all multi-line comments must be closed.
+                            None => {
+                                return IResult::Incomplete(Needed::Unknown);
+                            }
+                        }
+                    },
+                    '*' => {
+                        match chars.peek() {
+                            Some(&(_, pc)) => {
+                                if pc == '/' {
+                                    // About to close the comment.
+                                    if nest_level == 1 {
+                                        offset = i;
+                                        break;
+                                    }
+                                    nest_level -= 1;
+                                } else {
+                                    continue;
+                                }
+                            },
+                            // Got a single "*" at the end of the string. This is a parse error, as
+                            // all multi-line comments must be closed.
+                            None => {
+                                return IResult::Incomplete(Needed::Size(1));
+                            }
+                        }
+                    }
+                    _ => continue,
+                }
+            },
+            None => break,
+        }
+    }
+
+    println!("inside_comment: '{:?}', offset: {:?}", inside_comment, offset);
+    if offset + 2 <= inside_comment.len() {
+        // Consume the closing comment characters
+        IResult::Done(&inside_comment[(offset + 2)..], &inside_comment[..offset])
+    } else {
+        IResult::Done("", inside_comment)
+    }
+}
+
 /// Parse a comment.
 ///
 /// Defined in X.680 §12.6
 named!(comment<&str, &str>,
     alt!(
-        single_line_comment
+        single_line_comment |
+        multi_line_comment
     )
 );
 
@@ -147,9 +258,9 @@ named!(realnumber<&str, f64>,
 mod tests {
 
     use super::{number, realnumber, single_line_comment, take_until_single_line_comment_end,
-                newline};
-    use nom::IResult;
-    use nom::IResult::Done;
+                newline, multi_line_comment};
+    use nom::IResult::{Done, Incomplete};
+    use nom::{IResult, Needed};
 
     /// Simple way of specifying an `IResult::Done` with no remaining input.
     macro_rules! done_result (
@@ -191,6 +302,25 @@ mod tests {
         assert_eq!(single_line_comment("-- dash-in-middle\x0C"), done_result!(" dash-in-middle"));
         assert_eq!(single_line_comment("--\n"), done_result!(""));
         assert_eq!(single_line_comment("----"), done_result!(""));
+    }
+
+    #[test]
+    fn test_multi_line_comment() {
+        assert_eq!(multi_line_comment("/* stuff */"), done_result!(" stuff "));
+        assert_eq!(multi_line_comment("/* line1\nline2 */"), done_result!(" line1\nline2 "));
+        assert_eq!(multi_line_comment("/**/"), done_result!(""));
+
+        // Incomplete
+        assert_eq!(multi_line_comment("/*/"), Incomplete(Needed::Unknown));
+        assert_eq!(multi_line_comment("/**"), Incomplete(Needed::Size(1)));
+
+        // Nested comments
+        assert_eq!(multi_line_comment("/* Outer /* Inner */ Outer again */"),
+                   done_result!(" Outer /* Inner */ Outer again "));
+        assert_eq!(multi_line_comment("/* Out /* In */ Out2 /* In2 */ Out3 */"),
+                   done_result!(" Out /* In */ Out2 /* In2 */ Out3 "));
+        assert_eq!(multi_line_comment("/* Out /* In */ Out */ Extra */"),
+                   Done(" Extra */", " Out /* In */ Out "));
     }
 
     #[test]
