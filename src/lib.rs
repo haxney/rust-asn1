@@ -8,7 +8,120 @@ extern crate nom;
 extern crate regex;
 
 use std::str::FromStr;
+use nom::{IResult};
 
+/// Returns `true` if the character is a newline character according to ASN.1.
+///
+/// Defined in X.680 §12.1.6
+fn is_newline(ch: char) -> bool {
+    match ch {
+        // LINE FEED
+        '\n' => true,
+
+        // VERTICAL TABULATION
+        '\x0B' => true,
+
+        // FORM FEED
+        '\x0C' => true,
+
+        // CARRIAGE RETURN
+        '\x0D' => true,
+        _ => false,
+    }
+}
+
+named!(newline<&str, &str>,
+       alt!(
+           tag_s!("\n") |
+           tag_s!("\x0B") |
+           tag_s!("\x0C") |
+           tag_s!("\x0D")
+       )
+);
+
+/// Returns `true` if the character is a whitespace character according to ASN.1.
+///
+/// Defined in X.680 §12.1.6
+fn is_whitespace(ch: char) -> bool {
+    match ch {
+        ' ' | '\t' => true,
+
+        // All newline characters are also whitespace
+        _ if is_newline(ch) => true,
+        _ => false,
+    }
+}
+
+/// Takes input until it finds the end of a single-line comment. This will not consume the ending
+/// character(s) of the comment.
+fn take_until_single_line_comment_end(input: &str) -> IResult<&str, &str> {
+    let mut offset = input.len();
+    let mut chars = input.char_indices().peekable();
+    loop {
+        match chars.next() {
+            Some((i, c)) => {
+                match c {
+                    '-' => {
+                        match chars.peek() {
+                            Some(&(_, pc)) => {
+                                if pc == '-' {
+                                    offset = i;
+                                    break;
+                                } else {
+                                    // Safe to advance because we know that the peeked char is not
+                                    // a dash.
+                                    chars.next();
+                                    continue;
+                                }
+                            },
+                            // Got a single "-" at the end of the string. Consider it to be part of
+                            // the comment.
+                            None => {
+                                // Normally, adding 1 to a byte offset in a `&str` could lead to an
+                                // invalid access of a non-character boundary. In this case, we
+                                // know that the last character was a "-", which is a single byte.
+                                offset = i + 1;
+                                break
+                            }
+                        }
+                    },
+                    _ if is_newline(c) => {
+                        offset = i;
+                        break
+                    },
+                    _ => continue,
+                }
+            },
+            None => break,
+        }
+    }
+
+    if offset < input.len() {
+        IResult::Done(&input[offset..], &input[..offset])
+    } else {
+        IResult::Done("", input)
+    }
+}
+
+/// Parse a single-line comment.
+///
+/// Defined in X.680 §12.6a
+named!(single_line_comment<&str, &str>,
+    delimited!(
+        tag_s!("--"),
+        take_until_single_line_comment_end,
+        alt!(newline | tag_s!("--"))
+    )
+);
+
+/// Parse a comment.
+///
+/// Defined in X.680 §12.6
+named!(comment<&str, &str>,
+    alt!(
+        single_line_comment
+    )
+);
 
 /// Parse an integer.
 ///
@@ -33,7 +146,8 @@ named!(realnumber<&str, f64>,
 #[cfg(test)]
 mod tests {
 
-    use super::{number, realnumber};
+    use super::{number, realnumber, single_line_comment, take_until_single_line_comment_end,
+                newline};
     use nom::IResult;
     use nom::IResult::Done;
 
