@@ -5,20 +5,17 @@
 
 #![allow(dead_code)] // Until parser is complete. Too noisy otherwise
 
-#[phase(plugin)]
-extern crate peg_syntax_ext;
-
 extern crate collections;
-use std::collections::bitv::Bitv;
+use std::collections::BitVec;
 
-#[deriving(Clone, PartialEq, Eq, Show)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 struct RealNumber {
-    int_part: uint,
+    int_part: u64,
     frac_part: Option<String>,
-    exponent: Option<int>,
+    exponent: Option<i64>,
 }
 
-fn bstring_to_bitv(bs: Vec<char>) -> Bitv {
+fn bstring_to_bitvec(bs: Vec<char>) -> BitVec {
     bs.iter().filter_map(|&x| match x {
         '0' => Some(false),
         '1' => Some(true),
@@ -46,14 +43,14 @@ pub enum DefinitiveIdentification {
 }
 
 pub enum ArcIdentifier {
-    IntegerArc(uint),
+    IntegerArc(u64),
     NonIntArc(String),
 }
 
 pub enum DefinitiveObjIdComponent {
     NameForm(String),
-    DefinitiveNumberForm(uint),
-    DefinitiveNameAndNumberForm(String, uint),
+    DefinitiveNumberForm(u64),
+    DefinitiveNameAndNumberForm(String, u64),
 }
 
 pub enum Tag {
@@ -117,14 +114,13 @@ pub enum Assignment {
 
 }
 
-peg_file! asn1_grammar("grammar.rustpeg")
+peg_file! asn1_grammar("grammar.rustpeg");
 
 #[cfg(test)]
 mod tests {
     use super::asn1_grammar::{typereference, valuereference, comment,
                               realnumber, bstring, cstring};
     use super::RealNumber;
-    use std::collections::bitv::Bitv;
 
     #[test]
     pub fn test_typereference() {
@@ -179,19 +175,19 @@ mod tests {
         assert!(comment("/* stuff").is_err());
     }
 
-    fn realnum<T>(n: uint) -> Result<RealNumber, T> {
+    fn realnum<T>(n: u64) -> Result<RealNumber, T> {
         Ok(RealNumber { int_part: n, frac_part: None, exponent: None })
     }
 
-    fn realnum_f<T>(n: uint, f: &str) -> Result<RealNumber, T> {
+    fn realnum_f<T>(n: u64, f: &str) -> Result<RealNumber, T> {
         Ok(RealNumber { int_part: n, frac_part: Some(f.to_string()), exponent: None })
     }
 
-    fn realnum_f_e<T>(n: uint, f: &str, e: int) -> Result<RealNumber, T> {
+    fn realnum_f_e<T>(n: u64, f: &str, e: i64) -> Result<RealNumber, T> {
         Ok(RealNumber { int_part: n, frac_part: Some(f.to_string()), exponent: Some(e) })
     }
 
-    fn realnum_e<T>(n: uint, e: int) -> Result<RealNumber, T> {
+    fn realnum_e<T>(n: u64, e: i64) -> Result<RealNumber, T> {
         Ok(RealNumber { int_part: n, frac_part: None, exponent: Some(e) })
     }
 
@@ -223,10 +219,10 @@ mod tests {
 
     #[test]
     pub fn test_bstring() {
-        assert_eq!(bstring("'000'B"), Ok(Bitv::with_capacity(3, false)));
-        assert_eq!(bstring("''B"), Ok(Bitv::new()));
+        assert_eq!(bstring("'000'B"), Ok(BitVec::with_capacity(3, false)));
+        assert_eq!(bstring("''B"), Ok(BitVec::new()));
 
-        let expected: Bitv = vec![false, true, false].iter().map(|n| *n).collect();
+        let expected: BitVec = vec![false, true, false].iter().map(|n| *n).collect();
         let expect_ok = Ok(expected);
         assert_eq!(bstring("'010'B"), expect_ok);
         assert_eq!(bstring("'0 1\t0\n'B"), expect_ok);

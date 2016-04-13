@@ -2,7 +2,7 @@
 #![deny(missing_doc)]
 
 //! Documentation goes here.
-
-#![feature(phase)]
+#![feature(plugin)]
+#![plugin(peg_syntax_ext)]
 
 pub mod parser;

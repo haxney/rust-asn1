@@ -1,10 +1,5 @@
-{
-  use parser::{RealNumber, ModuleDefinition};
-  use std::collections::bitv::Bitv;
-}
-
-use parser::{RealNumber, bstring_to_bitv, ModuleDefinition};
-use std::collections::bitv::Bitv;
+use parser::{RealNumber, bstring_to_bitvec, ModuleDefinition};
+use std::collections::BitVec;
 use std::str;
 
 digit = [0-9]
@@ -77,12 +72,12 @@ multi_line_comment
   = "/*" (!"*/" .)* "*/"
 
 // Section 12.8
-number -> uint
+number -> u64
   = "0" { 0 }
-  / [1-9] digit* { from_str::<uint>(match_str).unwrap() }
+  / [1-9] digit* { from_str::<u64>(match_str).unwrap() }
 
-signed_number -> int
-  = "-"? number { from_str::<int>(match_str).unwrap() }
+signed_number -> i64
+  = "-"? number { from_str::<i64>(match_str).unwrap() }
 
 // Section 12.9
 #[export]
@@ -103,12 +98,12 @@ bstring_char -> char
 
 // Section 12.10
 #[export]
-bstring -> Bitv
-  = "'" bs:bstring_char* "'B" { bstring_to_bitv(bs) }
+bstring -> BitVec
+  = "'" bs:bstring_char* "'B" { bstring_to_bitvec(bs) }
 
 // Section 12.11
-xmlbstring -> Bitv
-  = bs:bstring_char* { bstring_to_bitv(bs) }
+xmlbstring -> BitVec
+  = bs:bstring_char* { bstring_to_bitvec(bs) }
 
 // Section 12.12
 hstring_char -> Option<char>
@@ -210,7 +205,7 @@ encodingreference -> String
   = [A-Z] ("-"? [A-Z0-9])* { match_str.to_string() }
 
 // Section 12.26
-integerUnicodeLabel -> uint
+integerUnicodeLabel -> u64
   = number
 
 // Intentionally does not include HYPHEN MINUS
@@ -321,10 +316,10 @@ DefinitiveObjIdComponent -> DefinitiveObjIdComponent
                   DefinitiveNameAndNumberForm(name, num)
   }}
 
-DefinitiveNumberForm -> uint
+DefinitiveNumberForm -> u64
   = n:number { n }
 
-DefinitiveNameAndNumberForm -> (String, uint)
+DefinitiveNameAndNumberForm -> (String, u64)
   = id:identifier __ "(" __ dnf:DefinitiveNumberForm __ ")" {
                   (id, dnf)
   }
