@@ -258,7 +258,7 @@ named!(realnumber<&str, f64>,
 mod tests {
 
     use super::{number, realnumber, single_line_comment, take_until_single_line_comment_end,
-                newline, multi_line_comment};
+                newline, multi_line_comment, comment};
     use nom::IResult::{Done, Incomplete};
     use nom::{IResult, Needed};
 
@@ -293,34 +293,62 @@ mod tests {
         assert_eq!(take_until_single_line_comment_end("-"), done_result!("-"));
     }
 
-    #[test]
-    fn test_single_line_comment() {
-        assert_eq!(single_line_comment("-- thing\nmore"), Done("more", " thing"));
-        assert_eq!(single_line_comment("-- thing--"), done_result!(" thing"));
-        assert_eq!(single_line_comment("-- thing\n"), done_result!(" thing"));
-        assert_eq!(single_line_comment("-- dash-in-middle--"), done_result!(" dash-in-middle"));
-        assert_eq!(single_line_comment("-- dash-in-middle\x0C"), done_result!(" dash-in-middle"));
+    fn single_line_comment_tests<F>(parser: F)
+        where F : Fn(&str) -> IResult<&str, &str> {
+
+        assert_eq!(parser("-- thing\nmore"), Done("more", " thing"));
+        assert_eq!(parser("-- thing--"), done_result!(" thing"));
+        assert_eq!(parser("-- thing\n"), done_result!(" thing"));
+        assert_eq!(parser("-- dash-in-middle--"), done_result!(" dash-in-middle"));
+        assert_eq!(parser("-- dash-in-middle\x0C"), done_result!(" dash-in-middle"));
+
+        // "/*" and "*/ have no special meaning in single-line comment.
+        assert_eq!(single_line_comment("--/* still\nsingle"), Done("single", "/* still"));
+        assert_eq!(single_line_comment("--*/* still\nsingle"), Done("single", "*/* still"));
+        assert_eq!(single_line_comment("--*/ *//* still\nsingle"),
+                   Done("single", "*/ *//* still"));
+
         assert_eq!(single_line_comment("--\n"), done_result!(""));
         assert_eq!(single_line_comment("----"), done_result!(""));
     }
 
     #[test]
-    fn test_multi_line_comment() {
-        assert_eq!(multi_line_comment("/* stuff */"), done_result!(" stuff "));
-        assert_eq!(multi_line_comment("/* line1\nline2 */"), done_result!(" line1\nline2 "));
-        assert_eq!(multi_line_comment("/**/"), done_result!(""));
+    fn test_single_line_comment() {
+        single_line_comment_tests(single_line_comment);
+    }
+
+    fn multi_line_comment_tests<F>(parser: F)
+        where F : Fn(&str) -> IResult<&str, &str> {
+
+        assert_eq!(parser("/* stuff */"), done_result!(" stuff "));
+        assert_eq!(parser("/* line1\nline2 */"), done_result!(" line1\nline2 "));
+        assert_eq!(parser("/**/"), done_result!(""));
+
+        // "--" in multi-line comment has no special meaning.
+        assert_eq!(parser("/* -- */"), done_result!(" -- "));
 
         // Incomplete
-        assert_eq!(multi_line_comment("/*/"), Incomplete(Needed::Unknown));
-        assert_eq!(multi_line_comment("/**"), Incomplete(Needed::Size(1)));
+        assert_eq!(parser("/*/"), Incomplete(Needed::Unknown));
+        assert_eq!(parser("/**"), Incomplete(Needed::Size(1)));
 
         // Nested comments
-        assert_eq!(multi_line_comment("/* Outer /* Inner */ Outer again */"),
+        assert_eq!(parser("/* Outer /* Inner */ Outer again */"),
                    done_result!(" Outer /* Inner */ Outer again "));
-        assert_eq!(multi_line_comment("/* Out /* In */ Out2 /* In2 */ Out3 */"),
+        assert_eq!(parser("/* Out /* In */ Out2 /* In2 */ Out3 */"),
                    done_result!(" Out /* In */ Out2 /* In2 */ Out3 "));
-        assert_eq!(multi_line_comment("/* Out /* In */ Out */ Extra */"),
+        assert_eq!(parser("/* Out /* In */ Out */ Extra */"),
                    Done(" Extra */", " Out /* In */ Out "));
+    }
+
+    #[test]
+    fn test_multi_line_comment() {
+        multi_line_comment_tests(multi_line_comment);
+    }
+
+    #[test]
+    fn test_comment() {
+        single_line_comment_tests(comment);
+        multi_line_comment_tests(comment);
     }
 
     #[test]
