@@ -9,6 +9,17 @@ extern crate regex;
 
 use std::str::FromStr;
 
+
+/// Parse an integer.
+///
+/// Defined in X.680 §12.8
+named!(number<&str, u64>,
+    map_res!(
+        re_find!(r"^(0|[1-9]\d*)"),
+        FromStr::from_str
+    )
+);
+
 /// Parse an `f64`.
 ///
 /// Defined in X.680 §12.9
@@ -22,7 +33,7 @@ named!(realnumber<&str, f64>,
 #[cfg(test)]
 mod tests {
 
-    use super::realnumber;
+    use super::{number, realnumber};
     use nom::IResult;
     use nom::IResult::Done;
 
@@ -32,6 +43,50 @@ mod tests {
             IResult::Done("", $res)
         )
     );
+
+    #[test]
+    fn test_newline() {
+        assert_eq!(newline("\n"), done_result!("\n"));
+        assert_eq!(newline("\x0B"), done_result!("\x0B"));
+    }
+
+    #[test]
+    fn test_take_until_single_line_comment_end() {
+        assert_eq!(take_until_single_line_comment_end(" thing\nmore"), Done("\nmore", " thing"));
+        assert_eq!(take_until_single_line_comment_end(" thing\n"), Done("\n", " thing"));
+        assert_eq!(take_until_single_line_comment_end(" thing--"), Done("--", " thing"));
+        assert_eq!(take_until_single_line_comment_end(" dash-in-middle--"),
+                   Done("--", " dash-in-middle"));
+        assert_eq!(take_until_single_line_comment_end(" dash-in-middle\x0C"),
+                   Done("\x0C", " dash-in-middle"));
+
+        // Empty comments
+        assert_eq!(take_until_single_line_comment_end("\n"), Done("\n", ""));
+        assert_eq!(take_until_single_line_comment_end("--"), Done("--", ""));
+
+        assert_eq!(take_until_single_line_comment_end("stuff-"), done_result!("stuff-"));
+        assert_eq!(take_until_single_line_comment_end("-"), done_result!("-"));
+    }
+
+    #[test]
+    fn test_single_line_comment() {
+        assert_eq!(single_line_comment("-- thing\nmore"), Done("more", " thing"));
+        assert_eq!(single_line_comment("-- thing--"), done_result!(" thing"));
+        assert_eq!(single_line_comment("-- thing\n"), done_result!(" thing"));
+        assert_eq!(single_line_comment("-- dash-in-middle--"), done_result!(" dash-in-middle"));
+        assert_eq!(single_line_comment("-- dash-in-middle\x0C"), done_result!(" dash-in-middle"));
+        assert_eq!(single_line_comment("--\n"), done_result!(""));
+        assert_eq!(single_line_comment("----"), done_result!(""));
+    }
+
+    #[test]
+    fn test_number() {
+        assert_eq!(number("0"), done_result!(0));
+        assert_eq!(number("1"), done_result!(1));
+
+        // Matches the first zero, but considers the second digit to be leftover input.
+        assert_eq!(number("01"), Done("1", 0));
+    }
 
     #[test]
     fn test_realnumber() {
