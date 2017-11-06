@@ -1,8 +1,7 @@
 use std::collections::HashSet;
 
 /// An `identifier` lexical item as specified by X.680 §12.3.
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Identifier(String);
 
 impl Identifier {
@@ -12,15 +11,36 @@ impl Identifier {
     }
 }
 
+/// A `valuereference` lexical item as specified by X.680 §12.4.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ValueReference(String);
+
+impl ValueReference {
+    pub fn new<S>(name: S) -> ValueReference
+        where S: Into<String> {
+        ValueReference(name.into())
+    }
+}
+
 /// A `typereference` lexical item as specified by X.680 §12.2.
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct TypeReference(String);
 
 impl TypeReference {
     pub fn new<S>(name: S) -> TypeReference
         where S: Into<String> {
         TypeReference(name.into())
+    }
+}
+
+/// A `modulereference` lexical item as specified by X.680 §12.5.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ModuleReference(String);
+
+impl ModuleReference {
+    pub fn new<S>(name: S) -> ModuleReference
+        where S: Into<String> {
+        ModuleReference(name.into())
     }
 }
 

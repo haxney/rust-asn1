@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use nom::{IResult, Needed};
-use types::{Identifier, TypeReference, RESERVED_WORDS};
+use types::{Identifier, TypeReference, RESERVED_WORDS, ValueReference, ModuleReference};
 
 /// Returns `true` if the character is a newline character according to ASN.1.
 ///
@@ -224,34 +224,39 @@ named!(realnumber<&str, f64>,
    )
 );
 
-/// Parse an `Identifier`
+// Parse an identifier as a string.
+named!(identifier_str<&str, &str>, re_find!(r"^[a-z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"));
+
+/// Parse an `Identifier`.
 ///
 /// Starts with a lowercase letter, can contain letters, digits, or hyphens, but cannot contain a
 /// double hyphen or end with a hyphen.
-named!(identifier<&str, Identifier>,
-    map!(
-        re_find!(r"^[a-z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"),
-        Identifier::new));
+named!(identifier<&str, Identifier>, map!(identifier_str, Identifier::new));
 
-// Parse a `typereference` string, but does not filter out reserved words.
+/// Parse a `ValueReference`.
+named!(valuereference<&str, ValueReference>, map!(identifier_str, ValueReference::new));
+
+// Parse a `typereference` string and filters out `RESERVED_WORDS`.
 named!(typereference_str<&str, &str>,
-    re_find!(r"^[A-Z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"));
+    verify!(
+        re_find!(r"^[A-Z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"),
+        |ref_name| !RESERVED_WORDS.contains(ref_name)));
 
-/// Parse a `TypeReference`
-///
-/// Matches `typereference_str`, but is not one or `RESERVED_WORDS`.
-named!(typereference<&str, TypeReference>,
-    map!(
-        verify!(typereference_str, |ref_name| !RESERVED_WORDS.contains(ref_name)),
-        TypeReference::new));
+/// Parse a `TypeReference`.
+named!(typereference<&str, TypeReference>, map!(typereference_str, TypeReference::new));
+
+/// Parse a `ModuleReference`.
+named!(modulereference<&str, ModuleReference>, map!(typereference_str, ModuleReference::new));
 
 #[cfg(test)]
 mod tests {
     use super::{number, realnumber, single_line_comment, take_until_single_line_comment_end,
-                newline, multi_line_comment, comment, identifier, typereference};
+                newline, multi_line_comment, comment, identifier, valuereference, typereference,
+                modulereference};
     use nom::IResult::{Done, Incomplete, Error};
     use nom::{IResult, Needed, ErrorKind};
-    use types::{Identifier, TypeReference};
+    use types::{Identifier, ValueReference, TypeReference, ModuleReference};
+    use std::fmt::Debug;
 
     /// Simple way of specifying an `IResult::Done` with no remaining input.
     macro_rules! done_result (
@@ -376,31 +381,60 @@ mod tests {
         assert_eq!(realnumber("1.1E03"), Done("3", 1.1));
     }
 
+    /// Run tests for parsers which behave like `Identifier`. Currently, this is only `Identifier`
+    /// and `ValueReference`.
+    fn identifier_like_tests<F, T, N>(parser: F, struct_maker: N)
+        where T: Debug + PartialEq,
+              F: Fn(&str) -> IResult<&str, T>,
+              N: Fn(&'static str) -> T
+    {
+        assert_eq!(parser("a"), done_result!(struct_maker("a")));
+        assert_eq!(parser("aB3"), done_result!(struct_maker("aB3")));
+        assert_eq!(parser("aB3-"), Done("-", struct_maker("aB3")));
+        assert_eq!(parser("dash-middle"), done_result!(struct_maker("dash-middle")));
+        assert_eq!(parser("space "), Done(" ", struct_maker("space")));
+        assert_eq!(parser("double--hypen"), Done("--hypen", struct_maker("double")));
+        assert_eq!(parser("-start"), Error(ErrorKind::RegexpFind));
+        assert_eq!(parser("Capital"), Error(ErrorKind::RegexpFind));
+    }
+
     #[test]
     fn test_identifier() {
-        assert_eq!(identifier("a"), done_result!(Identifier::new("a")));
-        assert_eq!(identifier("aB3"), done_result!(Identifier::new("aB3")));
-        assert_eq!(identifier("aB3-"), Done("-", Identifier::new("aB3")));
-        assert_eq!(identifier("dash-middle"), done_result!(Identifier::new("dash-middle")));
-        assert_eq!(identifier("space "), Done(" ", Identifier::new("space")));
-        assert_eq!(identifier("double--hypen"), Done("--hypen", Identifier::new("double")));
-        assert_eq!(identifier("-start"), Error(ErrorKind::RegexpFind));
-        assert_eq!(identifier("Capital"), Error(ErrorKind::RegexpFind));
+        identifier_like_tests(identifier, Identifier::new);
+    }
+
+    #[test]
+    fn test_valuereference() {
+        identifier_like_tests(valuereference, ValueReference::new)
+    }
+
+    /// Run tests for parsers which behave like `TypeReference`. Currently, this is only
+    /// `TypeReference` and `ModuleReference`.
+    fn typereference_like_tests<F, T, N>(parser: F, struct_maker: N)
+        where T: Debug + PartialEq,
+              F: Fn(&str) -> IResult<&str, T>,
+              N: Fn(&'static str) -> T
+    {
+        assert_eq!(parser("A"), done_result!(struct_maker("A")));
+        assert_eq!(parser("Good"), done_result!(struct_maker("Good")));
+        assert_eq!(parser("With-Dashes"), done_result!(struct_maker("With-Dashes")));
+        assert_eq!(parser("SpaCe "), Done(" ", struct_maker("SpaCe")));
+        assert_eq!(parser("DOUBLE--hypen"), Done("--hypen", struct_maker("DOUBLE")));
+        assert_eq!(parser("-start"), Error(ErrorKind::RegexpFind));
+        assert_eq!(parser("lower"), Error(ErrorKind::RegexpFind));
+        assert_eq!(parser("lower"), Error(ErrorKind::RegexpFind));
+
+        // ABSENT is a reserved word
+        assert_eq!(parser("ABSENT"), Error(ErrorKind::Verify));
     }
 
     #[test]
     fn test_typereference() {
-        assert_eq!(typereference("A"), done_result!(TypeReference::new("A")));
-        assert_eq!(typereference("Good"), done_result!(TypeReference::new("Good")));
-        assert_eq!(typereference("With-Dashes"), done_result!(TypeReference::new("With-Dashes")));
-        assert_eq!(typereference("SpaCe "), Done(" ", TypeReference::new("SpaCe")));
-        assert_eq!(typereference("DOUBLE--hypen"), Done("--hypen", TypeReference::new("DOUBLE")));
-        assert_eq!(typereference("-start"), Error(ErrorKind::RegexpFind));
-        assert_eq!(typereference("lower"), Error(ErrorKind::RegexpFind));
-        assert_eq!(typereference("lower"), Error(ErrorKind::RegexpFind));
+        typereference_like_tests(typereference, TypeReference::new);
+    }
 
-        // ABSENT is a reserved word
-        assert_eq!(typereference("ABSENT"), Error(ErrorKind::Verify));
-
+    #[test]
+    fn test_modulereference() {
+        typereference_like_tests(modulereference, ModuleReference::new);
     }
 }
