@@ -232,6 +232,28 @@ fn multi_line_comment(input: &str) -> IResult<&str, &str> {
     }
 }
 
+/// Consume a non-nested multi-line comment.
+named!(multi_line_comment_one_nest<&str, &str>,
+    delimited!(
+        tag_s!("/*"),
+        alt!(take_until_s!("/*") => { |_| ""} | take_until_s!("*/") => {|_| ""}),
+        tag_s!("*/")));
+
+named!(multi_line_comment2<&str, &str>,
+    alt_complete!(
+        multi_line_comment_one_nest |
+        do_parse!(
+            tag_s!("/*") >>
+            many0!()
+            take_until_s!("/*") >>
+            multi_line_comment2 >>
+            take_until_s!("*/") >>
+            tag_s!("*/") >>
+            ("")
+        )
+    )
+);
+
 /// Parse a comment.
 ///
 /// Defined in X.680 §12.6.
@@ -280,9 +302,7 @@ named!(bstring<&str, BitVec>,
 
 #[cfg(test)]
 mod tests {
-    use super::{number, realnumber, single_line_comment, take_until_single_line_comment_end,
-                newline, multi_line_comment, comment, identifier, valuereference, typereference,
-                modulereference, bstring, whitespace};
+    use super::*;
     use nom::IResult::{Done, Incomplete, Error};
     use nom::{IResult, Needed, ErrorKind};
     use types::{Identifier, ValueReference, TypeReference, ModuleReference};
@@ -295,6 +315,8 @@ mod tests {
             IResult::Done("", $res)
         )
     );
+
+    const EMPTY_DONE: IResult<&str, &str> = IResult::Done("", "");
 
     /// Run tests for parsers which behave like `TypeReference`. Currently, this is only
     /// `TypeReference` and `ModuleReference`.
@@ -448,45 +470,68 @@ mod tests {
         single_line_comment_tests(single_line_comment);
     }
 
-    fn multi_line_comment_tests<F>(parser: F)
+    fn multi_line_comment_tests_unnested<F>(parser: F)
     where
         F: Fn(&str) -> IResult<&str, &str>,
     {
-        assert_eq!(parser("/* stuff */"), done_result!(" stuff "));
-        assert_eq!(parser("/* line1\nline2 */"), done_result!(" line1\nline2 "));
-        assert_eq!(parser("/**/"), done_result!(""));
+        assert_eq!(parser("/* stuff */"), EMPTY_DONE);
+        assert_eq!(parser("/* line1\nline2 */"), EMPTY_DONE);
+        assert_eq!(parser("/**/"), EMPTY_DONE);
 
         // "--" in multi-line comment has no special meaning.
-        assert_eq!(parser("/* -- */"), done_result!(" -- "));
+        assert_eq!(parser("/* -- */"), EMPTY_DONE);
+    }
 
-        // Incomplete
-        assert_eq!(parser("/*/"), Incomplete(Needed::Unknown));
-        assert_eq!(parser("/**"), Incomplete(Needed::Size(1)));
-
+    fn multi_line_comment_tests_nested<F>(parser: F)
+        where
+            F: Fn(&str) -> IResult<&str, &str>,
+    {
         // Nested comments
         assert_eq!(
             parser("/* Outer /* Inner */ Outer again */"),
-            done_result!(" Outer /* Inner */ Outer again ")
+            EMPTY_DONE
         );
         assert_eq!(
             parser("/* Out /* In */ Out2 /* In2 */ Out3 */"),
-            done_result!(" Out /* In */ Out2 /* In2 */ Out3 ")
+            EMPTY_DONE
         );
         assert_eq!(
             parser("/* Out /* In */ Out */ Extra */"),
-            Done(" Extra */", " Out /* In */ Out ")
+            Done(" Extra */", "")
         );
     }
 
     #[test]
+    fn test_multi_line_comment_one_nest() {
+        multi_line_comment_tests_unnested(multi_line_comment_one_nest);
+        // Incomplete
+        assert_eq!(multi_line_comment_one_nest("/*/"), Incomplete(Needed::Size(4)));
+        assert_eq!(multi_line_comment_one_nest("/**"), Incomplete(Needed::Size(4)));
+
+        assert_eq!(multi_line_comment_one_nest("/* /* */"), IResult::Error(ErrorKind::Tag));
+    }
+
+    #[test]
+    fn test_multi_line_comment2() {
+        multi_line_comment_tests_unnested(multi_line_comment2);
+        multi_line_comment_tests_nested(multi_line_comment2);
+
+        // Incomplete
+        assert_eq!(multi_line_comment2("/*/"), Error(ErrorKind::Alt));
+        assert_eq!(multi_line_comment2("/**"), Incomplete(Needed::Size(4)));
+    }
+
+    #[test]
     fn test_multi_line_comment() {
-        multi_line_comment_tests(multi_line_comment);
+        multi_line_comment_tests_unnested(multi_line_comment);
+        multi_line_comment_tests_nested(multi_line_comment);
     }
 
     #[test]
     fn test_comment() {
         single_line_comment_tests(comment);
-        multi_line_comment_tests(comment);
+        multi_line_comment_tests_unnested(comment);
+        multi_line_comment_tests_nested(comment);
     }
 
     #[test]
