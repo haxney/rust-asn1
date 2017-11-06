@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use nom::{IResult, Needed};
-use types::Identifier;
+use types::{Identifier, TypeReference, RESERVED_WORDS};
 
 /// Returns `true` if the character is a newline character according to ASN.1.
 ///
@@ -233,13 +233,25 @@ named!(identifier<&str, Identifier>,
         re_find!(r"^[a-z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"),
         Identifier::new));
 
+// Parse a `typereference` string, but does not filter out reserved words.
+named!(typereference_str<&str, &str>,
+    re_find!(r"^[A-Z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"));
+
+/// Parse a `TypeReference`
+///
+/// Matches `typereference_str`, but is not one or `RESERVED_WORDS`.
+named!(typereference<&str, TypeReference>,
+    map!(
+        verify!(typereference_str, |ref_name| !RESERVED_WORDS.contains(ref_name)),
+        TypeReference::new));
+
 #[cfg(test)]
 mod tests {
     use super::{number, realnumber, single_line_comment, take_until_single_line_comment_end,
-                newline, multi_line_comment, comment, identifier};
+                newline, multi_line_comment, comment, identifier, typereference};
     use nom::IResult::{Done, Incomplete, Error};
     use nom::{IResult, Needed, ErrorKind};
-    use types::{Identifier};
+    use types::{Identifier, TypeReference};
 
     /// Simple way of specifying an `IResult::Done` with no remaining input.
     macro_rules! done_result (
@@ -374,5 +386,21 @@ mod tests {
         assert_eq!(identifier("double--hypen"), Done("--hypen", Identifier::new("double")));
         assert_eq!(identifier("-start"), Error(ErrorKind::RegexpFind));
         assert_eq!(identifier("Capital"), Error(ErrorKind::RegexpFind));
+    }
+
+    #[test]
+    fn test_typereference() {
+        assert_eq!(typereference("A"), done_result!(TypeReference::new("A")));
+        assert_eq!(typereference("Good"), done_result!(TypeReference::new("Good")));
+        assert_eq!(typereference("With-Dashes"), done_result!(TypeReference::new("With-Dashes")));
+        assert_eq!(typereference("SpaCe "), Done(" ", TypeReference::new("SpaCe")));
+        assert_eq!(typereference("DOUBLE--hypen"), Done("--hypen", TypeReference::new("DOUBLE")));
+        assert_eq!(typereference("-start"), Error(ErrorKind::RegexpFind));
+        assert_eq!(typereference("lower"), Error(ErrorKind::RegexpFind));
+        assert_eq!(typereference("lower"), Error(ErrorKind::RegexpFind));
+
+        // ABSENT is a reserved word
+        assert_eq!(typereference("ABSENT"), Error(ErrorKind::Verify));
+
     }
 }
