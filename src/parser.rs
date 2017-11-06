@@ -282,6 +282,47 @@ named!(bstring<&str, BitVec>,
 /// Parse an `xmlbstring` as defined in §12.11.
 named!(xmlbstring<&str, BitVec>, call!(plain_bstring));
 
+/// Parses a single hex character to a `u8`, uppercase only.
+named!(hstring_single<&str, u8>,
+    map_res!(
+        re_find!(r"^[0-9A-F]"),
+        |chr| u8::from_str_radix(chr, 16)));
+
+/// Parses a single hex character, upper or lowercase.
+named!(hstring_single_lower<&str, u8>,
+    map_res!(
+        re_find!(r"^[0-9A-Fa-f]"),
+        |chr| u8::from_str_radix(chr, 16)));
+
+/// Parse an `hstring` as defined in §12.12.
+///
+/// Parses a plain hex string to a vector of `u8`s. Note that each element of the vector corresponds
+/// to a single digit of the input hex, so the maximum value of each `u8` is `15`. This is done to
+/// support the requirement that `hstring` types be able to have an odd number of digits.
+named!(hstring<&str, Vec<u8> >,
+    delimited!(
+        tag_s!("'"),
+        fold_many0!(
+            asn_ws!(hstring_single),
+            Vec::new(),
+            |mut acc: Vec<_>, item| {
+                acc.push(item);
+                acc
+            }),
+        tag_s!("'H")));
+
+/// Parse an `xmlhstring` as defined in §12.13.
+///
+/// See format of [`hstring`]
+named!(xmlhstring<&str, Vec<u8> >,
+    fold_many0!(
+        asn_ws!(hstring_single_lower),
+        Vec::new(),
+        |mut acc: Vec<_>, item| {
+            acc.push(item);
+            acc
+        }));
+
 #[cfg(test)]
 mod tests {
     #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -580,5 +621,41 @@ mod tests {
         );
 
         assert_eq!(xmlbstring("'01101100'"), Done("'01101100'", BitVec::new()));
+    }
+
+    #[test]
+    fn test_hstring() {
+        assert_eq!(hstring("'AB0196'H"), done_result!(vec![10u8, 11, 0, 1, 9, 6]));
+        assert_eq!(hstring("'A B0\u{A0}19'H"), done_result!(vec![10u8, 11, 0, 1, 9]));
+        assert_eq!(hstring("' A\u{A0}\n\tB0196\x0B'H"), done_result!(vec![10u8, 11, 0, 1, 9, 6]));
+
+        // Missing initial quote
+        assert_eq!(hstring("01101100'B"), Error(ErrorKind::Tag));
+
+        // Missing ending "H"
+        assert_eq!(hstring("'01101100'"), Incomplete(Needed::Size(11)));
+    }
+
+    #[test]
+    fn test_xmlhstring() {
+        assert_eq!(
+            xmlhstring("AB0196"),
+            done_result!(vec![10u8, 11, 0, 1, 9, 6])
+        );
+        assert_eq!(
+            xmlhstring("AB \u{A0}0\n\t196"),
+            done_result!(vec![10u8, 11, 0, 1, 9, 6])
+        );
+        assert_eq!(
+            xmlhstring("\x0BAB0196 \t\x0D"),
+            done_result!(vec![10u8, 11, 0, 1, 9, 6])
+        );
+
+        assert_eq!(
+            xmlhstring("01101100'B"),
+            Done("'B", vec![0u8, 1, 1, 0, 1, 1, 0, 0])
+        );
+
+        assert_eq!(xmlhstring("'01101100'"), Done("'01101100'", vec![]));
     }
 }
