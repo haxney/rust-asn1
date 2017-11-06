@@ -11,6 +11,7 @@ extern crate nom;
 extern crate lazy_static;
 
 extern crate regex;
+extern crate bit_vec;
 
 mod parser;
 pub mod types;

@@ -1,6 +1,7 @@
 use std::str::FromStr;
 use nom::{IResult, Needed};
 use types::{Identifier, TypeReference, RESERVED_WORDS, ValueReference, ModuleReference};
+use bit_vec::BitVec;
 
 /// Returns `true` if the character is a newline character according to ASN.1.
 ///
@@ -36,13 +37,14 @@ named!(newline<&str, &str>,
 /// Defined in X.680 §12.1.6
 fn is_whitespace(ch: char) -> bool {
     match ch {
-        ' ' | '\t' => true,
+        ' ' | '\t' | '\u{A0}' => true,
 
         // All newline characters are also whitespace
-        _ if is_newline(ch) => true,
-        _ => false,
+        _  => is_newline(ch),
     }
 }
+
+named!(whitespace<&str, &str>, take_while_s!(is_whitespace));
 
 /// Takes input until it finds the end of a single-line comment. This will not consume the ending
 /// character(s) of the comment.
@@ -224,6 +226,32 @@ named!(realnumber<&str, f64>,
    )
 );
 
+/// Input consuming macro to wrap a matcher. This is a version of nom's `ws!` macro using the
+/// whitespace set of ASN.1.
+macro_rules! asn_ws (
+  ($i:expr, $($args:tt)*) => (
+    {
+      sep!($i, whitespace, $($args)*)
+    }
+  )
+);
+
+/// Parse a `bstring` as defined in §12.10.
+named!(bstring<&str, BitVec>,
+    delimited!(
+        tag_s!("'"),
+        fold_many0!(asn_ws!(alt!(tag_s!("0") | tag_s!("1"))),
+            BitVec::new(), |mut acc: BitVec, item| {
+                let item_bool = match item {
+                    "0" => false,
+                    "1" => true,
+                    _ => unreachable!(),
+                };
+                acc.push(item_bool);
+                acc
+            }),
+        tag_s!("'B")));
+
 // Parse an identifier as a string.
 named!(identifier_str<&str, &str>, re_find!(r"^[a-z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"));
 
@@ -252,11 +280,12 @@ named!(modulereference<&str, ModuleReference>, map!(typereference_str, ModuleRef
 mod tests {
     use super::{number, realnumber, single_line_comment, take_until_single_line_comment_end,
                 newline, multi_line_comment, comment, identifier, valuereference, typereference,
-                modulereference};
+                modulereference, bstring, whitespace};
     use nom::IResult::{Done, Incomplete, Error};
     use nom::{IResult, Needed, ErrorKind};
     use types::{Identifier, ValueReference, TypeReference, ModuleReference};
     use std::fmt::Debug;
+    use bit_vec::BitVec;
 
     /// Simple way of specifying an `IResult::Done` with no remaining input.
     macro_rules! done_result (
@@ -436,5 +465,31 @@ mod tests {
     #[test]
     fn test_modulereference() {
         typereference_like_tests(modulereference, ModuleReference::new);
+    }
+
+    #[test]
+    fn test_asn_ws() {
+        named!(tuple<&str, (&str, &str)>,
+            asn_ws!(tuple!(take_s!(3), tag_s!("de"))));
+
+        assert_eq!(
+            tuple(" \t abc\u{A0} de fg"),
+            Done("fg", ("abc", "de"))
+        );
+    }
+
+    #[test]
+    fn test_bstring() {
+        assert_eq!(bstring("'01101100'B"), done_result!(BitVec::from_bytes(&[0b01101100])));
+        assert_eq!(bstring("'01 1\u{A0}0\n1\t100'B"),
+                   done_result!(BitVec::from_bytes(&[0b01101100])));
+        assert_eq!(bstring("'\x0B01101100 \t\x0D'B"),
+                   done_result!(BitVec::from_bytes(&[0b01101100])));
+
+        // Missing initial quote
+        assert_eq!(bstring("01101100'B"), Error(ErrorKind::Tag));
+
+        // Missing ending "B"
+        assert_eq!(bstring("'01101100'"), Incomplete(Needed::Size(11)));
     }
 }

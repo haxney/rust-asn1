@@ -6,6 +6,7 @@ authors = ["Daniel Hackney <dan@haxney.org>"]
 [dependencies]
 regex = "0.2"
 lazy_static = "0.2"
+bit-vec = "0.4.4"
 
 [dependencies.nom]
 version = "^3.2"
