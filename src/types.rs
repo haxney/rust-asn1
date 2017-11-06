@@ -6,7 +6,9 @@ pub struct Identifier(String);
 
 impl Identifier {
     pub fn new<S>(name: S) -> Identifier
-        where S: Into<String> {
+    where
+        S: Into<String>,
+    {
         Identifier(name.into())
     }
 }
@@ -17,7 +19,9 @@ pub struct ValueReference(String);
 
 impl ValueReference {
     pub fn new<S>(name: S) -> ValueReference
-        where S: Into<String> {
+    where
+        S: Into<String>,
+    {
         ValueReference(name.into())
     }
 }
@@ -28,7 +32,9 @@ pub struct TypeReference(String);
 
 impl TypeReference {
     pub fn new<S>(name: S) -> TypeReference
-        where S: Into<String> {
+    where
+        S: Into<String>,
+    {
         TypeReference(name.into())
     }
 }
@@ -39,7 +45,9 @@ pub struct ModuleReference(String);
 
 impl ModuleReference {
     pub fn new<S>(name: S) -> ModuleReference
-        where S: Into<String> {
+    where
+        S: Into<String>,
+    {
         ModuleReference(name.into())
     }
 }

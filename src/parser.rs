@@ -40,7 +40,7 @@ fn is_whitespace(ch: char) -> bool {
         ' ' | '\t' | '\u{A0}' => true,
 
         // All newline characters are also whitespace
-        _  => is_newline(ch),
+        _ => is_newline(ch),
     }
 }
 
@@ -75,13 +75,13 @@ fn take_until_single_line_comment_end(input: &str) -> IResult<&str, &str> {
                                 // invalid access of a non-character boundary. In this case, we
                                 // know that the last character was a "-", which is a single byte.
                                 offset = i + 1;
-                                break
+                                break;
                             }
                         }
                     }
                     _ if is_newline(c) => {
                         offset = i;
-                        break
+                        break;
                     }
                     _ => continue,
                 }
@@ -302,35 +302,67 @@ mod tests {
 
     #[test]
     fn test_take_until_single_line_comment_end() {
-        assert_eq!(take_until_single_line_comment_end(" thing\nmore"), Done("\nmore", " thing"));
-        assert_eq!(take_until_single_line_comment_end(" thing\n"), Done("\n", " thing"));
-        assert_eq!(take_until_single_line_comment_end(" thing--"), Done("--", " thing"));
-        assert_eq!(take_until_single_line_comment_end(" dash-in-middle--"),
-                   Done("--", " dash-in-middle"));
-        assert_eq!(take_until_single_line_comment_end(" dash-in-middle\x0C"),
-                   Done("\x0C", " dash-in-middle"));
+        assert_eq!(
+            take_until_single_line_comment_end(" thing\nmore"),
+            Done("\nmore", " thing")
+        );
+        assert_eq!(
+            take_until_single_line_comment_end(" thing\n"),
+            Done("\n", " thing")
+        );
+        assert_eq!(
+            take_until_single_line_comment_end(" thing--"),
+            Done("--", " thing")
+        );
+        assert_eq!(
+            take_until_single_line_comment_end(" dash-in-middle--"),
+            Done("--", " dash-in-middle")
+        );
+        assert_eq!(
+            take_until_single_line_comment_end(" dash-in-middle\x0C"),
+            Done("\x0C", " dash-in-middle")
+        );
 
         // Empty comments
         assert_eq!(take_until_single_line_comment_end("\n"), Done("\n", ""));
         assert_eq!(take_until_single_line_comment_end("--"), Done("--", ""));
 
-        assert_eq!(take_until_single_line_comment_end("stuff-"), done_result!("stuff-"));
+        assert_eq!(
+            take_until_single_line_comment_end("stuff-"),
+            done_result!("stuff-")
+        );
         assert_eq!(take_until_single_line_comment_end("-"), done_result!("-"));
     }
 
     fn single_line_comment_tests<F>(parser: F)
-        where F: Fn(&str) -> IResult<&str, &str> {
+    where
+        F: Fn(&str) -> IResult<&str, &str>,
+    {
         assert_eq!(parser("-- thing\nmore"), Done("more", " thing"));
         assert_eq!(parser("-- thing--"), done_result!(" thing"));
         assert_eq!(parser("-- thing\n"), done_result!(" thing"));
-        assert_eq!(parser("-- dash-in-middle--"), done_result!(" dash-in-middle"));
-        assert_eq!(parser("-- dash-in-middle\x0C"), done_result!(" dash-in-middle"));
+        assert_eq!(
+            parser("-- dash-in-middle--"),
+            done_result!(" dash-in-middle")
+        );
+        assert_eq!(
+            parser("-- dash-in-middle\x0C"),
+            done_result!(" dash-in-middle")
+        );
 
         // "/*" and "*/ have no special meaning in single-line comment.
-        assert_eq!(single_line_comment("--/* still\nsingle"), Done("single", "/* still"));
-        assert_eq!(single_line_comment("--*/* still\nsingle"), Done("single", "*/* still"));
-        assert_eq!(single_line_comment("--*/ *//* still\nsingle"),
-                   Done("single", "*/ *//* still"));
+        assert_eq!(
+            single_line_comment("--/* still\nsingle"),
+            Done("single", "/* still")
+        );
+        assert_eq!(
+            single_line_comment("--*/* still\nsingle"),
+            Done("single", "*/* still")
+        );
+        assert_eq!(
+            single_line_comment("--*/ *//* still\nsingle"),
+            Done("single", "*/ *//* still")
+        );
 
         assert_eq!(single_line_comment("--\n"), done_result!(""));
         assert_eq!(single_line_comment("----"), done_result!(""));
@@ -342,7 +374,9 @@ mod tests {
     }
 
     fn multi_line_comment_tests<F>(parser: F)
-        where F: Fn(&str) -> IResult<&str, &str> {
+    where
+        F: Fn(&str) -> IResult<&str, &str>,
+    {
         assert_eq!(parser("/* stuff */"), done_result!(" stuff "));
         assert_eq!(parser("/* line1\nline2 */"), done_result!(" line1\nline2 "));
         assert_eq!(parser("/**/"), done_result!(""));
@@ -355,12 +389,18 @@ mod tests {
         assert_eq!(parser("/**"), Incomplete(Needed::Size(1)));
 
         // Nested comments
-        assert_eq!(parser("/* Outer /* Inner */ Outer again */"),
-                   done_result!(" Outer /* Inner */ Outer again "));
-        assert_eq!(parser("/* Out /* In */ Out2 /* In2 */ Out3 */"),
-                   done_result!(" Out /* In */ Out2 /* In2 */ Out3 "));
-        assert_eq!(parser("/* Out /* In */ Out */ Extra */"),
-                   Done(" Extra */", " Out /* In */ Out "));
+        assert_eq!(
+            parser("/* Outer /* Inner */ Outer again */"),
+            done_result!(" Outer /* Inner */ Outer again ")
+        );
+        assert_eq!(
+            parser("/* Out /* In */ Out2 /* In2 */ Out3 */"),
+            done_result!(" Out /* In */ Out2 /* In2 */ Out3 ")
+        );
+        assert_eq!(
+            parser("/* Out /* In */ Out */ Extra */"),
+            Done(" Extra */", " Out /* In */ Out ")
+        );
     }
 
     #[test]
@@ -413,16 +453,23 @@ mod tests {
     /// Run tests for parsers which behave like `Identifier`. Currently, this is only `Identifier`
     /// and `ValueReference`.
     fn identifier_like_tests<F, T, N>(parser: F, struct_maker: N)
-        where T: Debug + PartialEq,
-              F: Fn(&str) -> IResult<&str, T>,
-              N: Fn(&'static str) -> T
+    where
+        T: Debug + PartialEq,
+        F: Fn(&str) -> IResult<&str, T>,
+        N: Fn(&'static str) -> T,
     {
         assert_eq!(parser("a"), done_result!(struct_maker("a")));
         assert_eq!(parser("aB3"), done_result!(struct_maker("aB3")));
         assert_eq!(parser("aB3-"), Done("-", struct_maker("aB3")));
-        assert_eq!(parser("dash-middle"), done_result!(struct_maker("dash-middle")));
+        assert_eq!(
+            parser("dash-middle"),
+            done_result!(struct_maker("dash-middle"))
+        );
         assert_eq!(parser("space "), Done(" ", struct_maker("space")));
-        assert_eq!(parser("double--hypen"), Done("--hypen", struct_maker("double")));
+        assert_eq!(
+            parser("double--hypen"),
+            Done("--hypen", struct_maker("double"))
+        );
         assert_eq!(parser("-start"), Error(ErrorKind::RegexpFind));
         assert_eq!(parser("Capital"), Error(ErrorKind::RegexpFind));
     }
@@ -440,15 +487,22 @@ mod tests {
     /// Run tests for parsers which behave like `TypeReference`. Currently, this is only
     /// `TypeReference` and `ModuleReference`.
     fn typereference_like_tests<F, T, N>(parser: F, struct_maker: N)
-        where T: Debug + PartialEq,
-              F: Fn(&str) -> IResult<&str, T>,
-              N: Fn(&'static str) -> T
+    where
+        T: Debug + PartialEq,
+        F: Fn(&str) -> IResult<&str, T>,
+        N: Fn(&'static str) -> T,
     {
         assert_eq!(parser("A"), done_result!(struct_maker("A")));
         assert_eq!(parser("Good"), done_result!(struct_maker("Good")));
-        assert_eq!(parser("With-Dashes"), done_result!(struct_maker("With-Dashes")));
+        assert_eq!(
+            parser("With-Dashes"),
+            done_result!(struct_maker("With-Dashes"))
+        );
         assert_eq!(parser("SpaCe "), Done(" ", struct_maker("SpaCe")));
-        assert_eq!(parser("DOUBLE--hypen"), Done("--hypen", struct_maker("DOUBLE")));
+        assert_eq!(
+            parser("DOUBLE--hypen"),
+            Done("--hypen", struct_maker("DOUBLE"))
+        );
         assert_eq!(parser("-start"), Error(ErrorKind::RegexpFind));
         assert_eq!(parser("lower"), Error(ErrorKind::RegexpFind));
         assert_eq!(parser("lower"), Error(ErrorKind::RegexpFind));
@@ -472,19 +526,23 @@ mod tests {
         named!(tuple<&str, (&str, &str)>,
             asn_ws!(tuple!(take_s!(3), tag_s!("de"))));
 
-        assert_eq!(
-            tuple(" \t abc\u{A0} de fg"),
-            Done("fg", ("abc", "de"))
-        );
+        assert_eq!(tuple(" \t abc\u{A0} de fg"), Done("fg", ("abc", "de")));
     }
 
     #[test]
     fn test_bstring() {
-        assert_eq!(bstring("'01101100'B"), done_result!(BitVec::from_bytes(&[0b01101100])));
-        assert_eq!(bstring("'01 1\u{A0}0\n1\t100'B"),
-                   done_result!(BitVec::from_bytes(&[0b01101100])));
-        assert_eq!(bstring("'\x0B01101100 \t\x0D'B"),
-                   done_result!(BitVec::from_bytes(&[0b01101100])));
+        assert_eq!(
+            bstring("'01101100'B"),
+            done_result!(BitVec::from_bytes(&[0b01101100]))
+        );
+        assert_eq!(
+            bstring("'01 1\u{A0}0\n1\t100'B"),
+            done_result!(BitVec::from_bytes(&[0b01101100]))
+        );
+        assert_eq!(
+            bstring("'\x0B01101100 \t\x0D'B"),
+            done_result!(BitVec::from_bytes(&[0b01101100]))
+        );
 
         // Missing initial quote
         assert_eq!(bstring("01101100'B"), Error(ErrorKind::Tag));
