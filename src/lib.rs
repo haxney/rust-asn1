@@ -131,7 +131,7 @@ macro_rules! recognize_s (
       match $submac!($i, $($args)*) {
         IResult::Done(i,_) => {
           let index = offset($i, i);
-          println!("dollar input: '{:?}', index: {}", $i, index);
+
           IResult::Done(i, &($i)[..index])
         },
         IResult::Error(e)      => return IResult::Error(e),
@@ -169,7 +169,7 @@ fn multi_line_comment(input: &str) -> IResult<&str, &str> {
     let mut nest_level: u32 = 1;
     loop {
         let next_char = chars.next();
-        println!("next_char: '{:?}'", next_char);
+
         match next_char {
             Some((i, c)) => {
                 match c {
@@ -217,7 +217,6 @@ fn multi_line_comment(input: &str) -> IResult<&str, &str> {
         }
     }
 
-    println!("inside_comment: '{:?}', offset: {:?}", inside_comment, offset);
     if offset + 2 <= inside_comment.len() {
         // Consume the closing comment characters
         IResult::Done(&inside_comment[(offset + 2)..], &inside_comment[..offset])
