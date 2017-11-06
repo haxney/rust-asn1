@@ -64,10 +64,14 @@ macro_rules! asn_ws (
   )
 );
 
+/// An identifier-like sequence that begins with an uppercase letter.
+named!(upper_identifier<&str, &str>,
+    re_find!(r"^[A-Z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"));
+
 // Parse a `typereference` string and filters out `RESERVED_WORDS`.
 named!(typereference_str<&str, &str>,
     verify!(
-        re_find!(r"^[A-Z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"),
+        upper_identifier,
         |ref_name| !RESERVED_WORDS.contains(ref_name)));
 
 /// Parse a `TypeReference` according to §12.2.
@@ -366,6 +370,29 @@ named!(cstring<&str, String>,
         tag_s!("\"")));
 
 // Skipping xmlcstring for now. It is super weird.
+
+/// Parser for `simplestring` type as defined in §12.16.
+///
+/// It is similar to `cstring`, but it does not have escaping for quotation mark characters.
+named!(simplestring<&str, &str>,
+    delimited!(
+        tag_s!("\""),
+        is_not_s!("\""),
+        tag_s!("\"")
+    ));
+
+/// Parser for `tstring` as defined in §12.17.
+named!(tstring<&str, &str>,
+    delimited!(
+        tag_s!("\""),
+        is_a_s!("0123456789+-:.,/CDHMRPSTWYZ"),
+        tag_s!("\"")));
+
+named!(xmltstring<&str, &str>, call!(tstring));
+
+
+/// Parser for `psname` as defined in §12.19.
+named!(psname<&str, &str>, call!(upper_identifier));
 
 #[cfg(test)]
 mod tests {
@@ -731,5 +758,13 @@ mod tests {
 
         // Strips spaces before newline
         assert_eq!(cstring("\"some \"\" \t\nmore\""), done_string(r#"some "more"#));
+    }
+
+    #[test]
+    fn test_simplestring() {
+        assert_eq!(simplestring("\"hi there\n\""), done_result!("hi there\n"));
+        assert_eq!(simplestring("\"some\nmore\""), done_result!("some\nmore"));
+
+        assert_eq!(simplestring("\"missing close"), Incomplete(Needed::Size(15)));
     }
 }
