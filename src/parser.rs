@@ -236,9 +236,10 @@ named!(identifier<&str, Identifier>,
 #[cfg(test)]
 mod tests {
     use super::{number, realnumber, single_line_comment, take_until_single_line_comment_end,
-                newline, multi_line_comment, comment};
-    use nom::IResult::{Done, Incomplete};
-    use nom::{IResult, Needed};
+                newline, multi_line_comment, comment, identifier};
+    use nom::IResult::{Done, Incomplete, Error};
+    use nom::{IResult, Needed, ErrorKind};
+    use types::{Identifier};
 
     /// Simple way of specifying an `IResult::Done` with no remaining input.
     macro_rules! done_result (
@@ -361,5 +362,17 @@ mod tests {
         // Leading zero in exponent
         assert_eq!(realnumber("1.1E-03"), Done("3", 1.1));
         assert_eq!(realnumber("1.1E03"), Done("3", 1.1));
+    }
+
+    #[test]
+    fn test_identifier() {
+        assert_eq!(identifier("a"), done_result!(Identifier::new("a")));
+        assert_eq!(identifier("aB3"), done_result!(Identifier::new("aB3")));
+        assert_eq!(identifier("aB3-"), Done("-", Identifier::new("aB3")));
+        assert_eq!(identifier("dash-middle"), done_result!(Identifier::new("dash-middle")));
+        assert_eq!(identifier("space "), Done(" ", Identifier::new("space")));
+        assert_eq!(identifier("double--hypen"), Done("--hypen", Identifier::new("double")));
+        assert_eq!(identifier("-start"), Error(ErrorKind::RegexpFind));
+        assert_eq!(identifier("Capital"), Error(ErrorKind::RegexpFind));
     }
 }

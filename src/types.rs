@@ -1,4 +1,6 @@
 /// An identifier lexical item as specified by X.680 §12.3
+#[derive(Debug)]
+#[derive(PartialEq)]
 pub struct Identifier(String);
 
 impl Identifier {
