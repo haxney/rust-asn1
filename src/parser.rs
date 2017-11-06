@@ -32,16 +32,23 @@ named!(newline<&str, &str>,
        )
 );
 
+/// Returns `true` if the character is a non-newline whitespace character.
+///
+/// Defined in §12.1.6
+fn is_separator(ch: char) -> bool {
+    match ch {
+        ' ' | '\t' | '\u{A0}' => true,
+        _ => false
+    }
+}
+
+named!(separator<&str, &str>, take_while_s!(is_separator));
+
 /// Returns `true` if the character is a whitespace character according to ASN.1.
 ///
 /// Defined in X.680 §12.1.6
 fn is_whitespace(ch: char) -> bool {
-    match ch {
-        ' ' | '\t' | '\u{A0}' => true,
-
-        // All newline characters are also whitespace
-        _ => is_newline(ch),
-    }
+    is_separator(ch) || is_newline(ch)
 }
 
 /// Parse whitespace according to §12.1.6
@@ -323,12 +330,17 @@ named!(xmlhstring<&str, Vec<u8> >,
             acc
         }));
 
-/// Parse one line of a `cstring`. Needs to return a `String` because it may need to replace escaped
-/// characters. Parses up to, but not including, a `"` or newline. Eats any trailing whitespace
-/// before a newline.
-named!(string_single_line<&str, String>,
+/// A single-line string that ends in a newline and does not have any escaped `"`.
+named!(string_segment_newline_end<&str, &str>,
+    map!(
+        re_capture!(r"^([^\x22\n\x0B\x0C\x0D]*?)([ \t\xA0]*[\n\x0B\x0C\x0D])"),
+    |v| v[1]));
+
+/// Parses an unwrapped `cstring` up to an unmatched `"`
+named!(plain_cstring<&str, String>,
     fold_many0!(
         alt!(
+            string_segment_newline_end |
             is_not_s!("\"\n\x0B\x0C\x0D") |
             map!(
                 complete!(tag_s!("\"\"")),
@@ -347,12 +359,13 @@ named!(string_single_line<&str, String>,
 ///
 /// Does not handle any of the "printed representation" special cases documented in §12.14.2. Why a
 /// computer protocol specification would worry so much about printed representations is a mystery.
-//named!(plain_cstring<&str, &str>,
-//    preceded!(
-//        tag_s!("\""),
-//
-//    )
-//);
+named!(cstring<&str, String>,
+    delimited!(
+        tag_s!("\""),
+        plain_cstring,
+        tag_s!("\"")));
+
+// Skipping xmlcstring for now. It is super weird.
 
 #[cfg(test)]
 mod tests {
@@ -695,14 +708,28 @@ mod tests {
     }
 
     #[test]
-    fn test_string_single_line() {
-        assert_eq!(string_single_line("hi there"), done_string("hi there"));
-        assert_eq!(string_single_line("quote \"\" escape"), done_string("quote \" escape"));
+    fn test_string_segment_newline_end() {
+        assert_eq!(string_segment_newline_end("hi there\n"), done_result!("hi there"));
 
         // Stops at newline
-        assert_eq!(string_single_line("some \"\"\nmore"), Done("\nmore", "some \"".to_string()));
+        assert_eq!(string_segment_newline_end("some\nmore"), Done("more", "some"));
 
         // Strips spaces before newline
-        //assert_eq!(string_single_line("some \"\" \t\nmore"), Done("\nmore", "some \"".to_string()));
+        assert_eq!(string_segment_newline_end("some \t\nmore"), Done("more", "some"));
+
+        assert_eq!(string_segment_newline_end(" \t\ntrailing"), Done("trailing", ""));
+
+        // Errors at quote
+        assert_eq!(string_segment_newline_end("some\"\"more"), Error(ErrorKind::RegexpCapture));
+    }
+
+    #[test]
+    fn test_cstring() {
+        assert_eq!(cstring(r#""hi there""#), done_string("hi there"));
+        assert_eq!(cstring(r#""quote "" escape""#), done_string("quote \" escape"));
+        assert_eq!(cstring("\"some \"\"\nmore\""), done_string(r#"some "more"#));
+
+        // Strips spaces before newline
+        assert_eq!(cstring("\"some \"\" \t\nmore\""), done_string(r#"some "more"#));
     }
 }
