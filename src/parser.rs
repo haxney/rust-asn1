@@ -262,27 +262,31 @@ named!(realnumber<&str, f64>,
    )
 );
 
+/// Parse a bit string without any wrapping. Used for the various bstring types.
+named!(plain_bstring<&str, BitVec>,
+    fold_many0!(
+        asn_ws!(alt!(tag_s!("0") => { |_| false } | tag_s!("1") => { |_| true })),
+        BitVec::new(),
+        |mut acc: BitVec, item| {
+            acc.push(item);
+            acc
+        }));
+
 /// Parse a `bstring` as defined in §12.10.
 named!(bstring<&str, BitVec>,
     delimited!(
         tag_s!("'"),
-        fold_many0!(asn_ws!(alt!(tag_s!("0") | tag_s!("1"))),
-            BitVec::new(), |mut acc: BitVec, item| {
-                let item_bool = match item {
-                    "0" => false,
-                    "1" => true,
-                    _ => unreachable!(),
-                };
-                acc.push(item_bool);
-                acc
-            }),
+        plain_bstring,
         tag_s!("'B")));
+
+/// Parse an `xmlbstring` as defined in §12.11.
+named!(xmlbstring<&str, BitVec>, call!(plain_bstring));
 
 #[cfg(test)]
 mod tests {
-    use super::{number, realnumber, single_line_comment, take_until_single_line_comment_end,
-                newline, multi_line_comment, comment, identifier, valuereference, typereference,
-                modulereference, bstring, whitespace};
+    #[cfg_attr(rustfmt, rustfmt_skip)]
+    use super::*;
+
     use nom::IResult::{Done, Incomplete, Error};
     use nom::{IResult, Needed, ErrorKind};
     use types::{Identifier, ValueReference, TypeReference, ModuleReference};
@@ -553,5 +557,28 @@ mod tests {
 
         // Missing ending "B"
         assert_eq!(bstring("'01101100'"), Incomplete(Needed::Size(11)));
+    }
+
+    #[test]
+    fn test_xmlbstring() {
+        assert_eq!(
+            xmlbstring("01101100"),
+            done_result!(BitVec::from_bytes(&[0b01101100]))
+        );
+        assert_eq!(
+            xmlbstring("01 1\u{A0}0\n1\t100"),
+            done_result!(BitVec::from_bytes(&[0b01101100]))
+        );
+        assert_eq!(
+            xmlbstring("\x0B01101100 \t\x0D"),
+            done_result!(BitVec::from_bytes(&[0b01101100]))
+        );
+
+        assert_eq!(
+            xmlbstring("01101100'B"),
+            Done("'B", BitVec::from_bytes(&[0b01101100]))
+        );
+
+        assert_eq!(xmlbstring("'01101100'"), Done("'01101100'", BitVec::new()));
     }
 }
