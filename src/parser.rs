@@ -44,7 +44,43 @@ fn is_whitespace(ch: char) -> bool {
     }
 }
 
+/// Parse whitespace according to §12.1.6
 named!(whitespace<&str, &str>, take_while_s!(is_whitespace));
+
+/// Input consuming macro to wrap a matcher. This is a version of nom's `ws!` macro using the
+/// whitespace set of ASN.1.
+macro_rules! asn_ws (
+  ($i:expr, $($args:tt)*) => (
+    {
+      sep!($i, whitespace, $($args)*)
+    }
+  )
+);
+
+// Parse a `typereference` string and filters out `RESERVED_WORDS`.
+named!(typereference_str<&str, &str>,
+    verify!(
+        re_find!(r"^[A-Z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"),
+        |ref_name| !RESERVED_WORDS.contains(ref_name)));
+
+/// Parse a `TypeReference` according to §12.2.
+named!(typereference<&str, TypeReference>, map!(typereference_str, TypeReference::new));
+
+
+// Parse an identifier as a string.
+named!(identifier_str<&str, &str>, re_find!(r"^[a-z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"));
+
+/// Parse an `Identifier` according to §12.3.
+///
+/// Starts with a lowercase letter, can contain letters, digits, or hyphens, but cannot contain a
+/// double hyphen or end with a hyphen.
+named!(identifier<&str, Identifier>, map!(identifier_str, Identifier::new));
+
+/// Parse a `ValueReference` according to §12.4.
+named!(valuereference<&str, ValueReference>, map!(identifier_str, ValueReference::new));
+
+/// Parse a `ModuleReference` according to §12.5.
+named!(modulereference<&str, ModuleReference>, map!(typereference_str, ModuleReference::new));
 
 /// Takes input until it finds the end of a single-line comment. This will not consume the ending
 /// character(s) of the comment.
@@ -99,7 +135,7 @@ fn take_until_single_line_comment_end(input: &str) -> IResult<&str, &str> {
 
 /// Parse a single-line comment.
 ///
-/// Defined in X.680 §12.6a
+/// Defined in X.680 §12.6.3
 named!(single_line_comment<&str, &str>,
     delimited!(
         tag_s!("--"),
@@ -128,7 +164,7 @@ fn offset<T: AsRef<[u8]>>(base: T, sub: T) -> usize {
 /// Multi-line comments must be closed. If the end of the file is reached before the closing tag is
 /// found, this is an error.
 ///
-/// Defined in X.680 §12.6b
+/// Defined in X.680 §12.6.4
 fn multi_line_comment(input: &str) -> IResult<&str, &str> {
     let mut offset = input.len();
 
@@ -198,7 +234,7 @@ fn multi_line_comment(input: &str) -> IResult<&str, &str> {
 
 /// Parse a comment.
 ///
-/// Defined in X.680 §12.6
+/// Defined in X.680 §12.6.
 named!(comment<&str, &str>,
     alt!(
         single_line_comment |
@@ -208,7 +244,7 @@ named!(comment<&str, &str>,
 
 /// Parse an integer.
 ///
-/// Defined in X.680 §12.8
+/// Defined in X.680 §12.8.
 named!(number<&str, u64>,
     map_res!(
         re_find!(r"^(0|[1-9]\d*)"),
@@ -218,22 +254,12 @@ named!(number<&str, u64>,
 
 /// Parse an `f64`.
 ///
-/// Defined in X.680 §12.9
+/// Defined in X.680 §12.9.
 named!(realnumber<&str, f64>,
    map_res!(
        re_find!(r"^\d+(\.\d*)?([eE]-?(0|[1-9]\d*))?"),
        FromStr::from_str
    )
-);
-
-/// Input consuming macro to wrap a matcher. This is a version of nom's `ws!` macro using the
-/// whitespace set of ASN.1.
-macro_rules! asn_ws (
-  ($i:expr, $($args:tt)*) => (
-    {
-      sep!($i, whitespace, $($args)*)
-    }
-  )
 );
 
 /// Parse a `bstring` as defined in §12.10.
@@ -251,30 +277,6 @@ named!(bstring<&str, BitVec>,
                 acc
             }),
         tag_s!("'B")));
-
-// Parse an identifier as a string.
-named!(identifier_str<&str, &str>, re_find!(r"^[a-z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"));
-
-/// Parse an `Identifier`.
-///
-/// Starts with a lowercase letter, can contain letters, digits, or hyphens, but cannot contain a
-/// double hyphen or end with a hyphen.
-named!(identifier<&str, Identifier>, map!(identifier_str, Identifier::new));
-
-/// Parse a `ValueReference`.
-named!(valuereference<&str, ValueReference>, map!(identifier_str, ValueReference::new));
-
-// Parse a `typereference` string and filters out `RESERVED_WORDS`.
-named!(typereference_str<&str, &str>,
-    verify!(
-        re_find!(r"^[A-Z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"),
-        |ref_name| !RESERVED_WORDS.contains(ref_name)));
-
-/// Parse a `TypeReference`.
-named!(typereference<&str, TypeReference>, map!(typereference_str, TypeReference::new));
-
-/// Parse a `ModuleReference`.
-named!(modulereference<&str, ModuleReference>, map!(typereference_str, ModuleReference::new));
 
 #[cfg(test)]
 mod tests {
@@ -294,11 +296,84 @@ mod tests {
         )
     );
 
+    /// Run tests for parsers which behave like `TypeReference`. Currently, this is only
+    /// `TypeReference` and `ModuleReference`.
+    fn typereference_like_tests<F, T, N>(parser: F, struct_maker: N)
+    where
+        T: Debug + PartialEq,
+        F: Fn(&str) -> IResult<&str, T>,
+        N: Fn(&'static str) -> T,
+    {
+        assert_eq!(parser("A"), done_result!(struct_maker("A")));
+        assert_eq!(parser("Good"), done_result!(struct_maker("Good")));
+        assert_eq!(
+            parser("With-Dashes"),
+            done_result!(struct_maker("With-Dashes"))
+        );
+        assert_eq!(parser("SpaCe "), Done(" ", struct_maker("SpaCe")));
+        assert_eq!(
+            parser("DOUBLE--hypen"),
+            Done("--hypen", struct_maker("DOUBLE"))
+        );
+        assert_eq!(parser("-start"), Error(ErrorKind::RegexpFind));
+        assert_eq!(parser("lower"), Error(ErrorKind::RegexpFind));
+        assert_eq!(parser("lower"), Error(ErrorKind::RegexpFind));
+
+        // ABSENT is a reserved word
+        assert_eq!(parser("ABSENT"), Error(ErrorKind::Verify));
+    }
+
+    /// Run tests for parsers which behave like `Identifier`. Currently, this is only `Identifier`
+    /// and `ValueReference`.
+    fn identifier_like_tests<F, T, N>(parser: F, struct_maker: N)
+    where
+        T: Debug + PartialEq,
+        F: Fn(&str) -> IResult<&str, T>,
+        N: Fn(&'static str) -> T,
+    {
+        assert_eq!(parser("a"), done_result!(struct_maker("a")));
+        assert_eq!(parser("aB3"), done_result!(struct_maker("aB3")));
+        assert_eq!(parser("aB3-"), Done("-", struct_maker("aB3")));
+        assert_eq!(
+            parser("dash-middle"),
+            done_result!(struct_maker("dash-middle"))
+        );
+        assert_eq!(parser("space "), Done(" ", struct_maker("space")));
+        assert_eq!(
+            parser("double--hypen"),
+            Done("--hypen", struct_maker("double"))
+        );
+        assert_eq!(parser("-start"), Error(ErrorKind::RegexpFind));
+        assert_eq!(parser("Capital"), Error(ErrorKind::RegexpFind));
+    }
+
+    #[test]
+    fn test_typereference() {
+        typereference_like_tests(typereference, TypeReference::new);
+    }
+
+    #[test]
+    fn test_identifier() {
+        identifier_like_tests(identifier, Identifier::new);
+    }
+
+    #[test]
+    fn test_valuereference() {
+        identifier_like_tests(valuereference, ValueReference::new)
+    }
+
+    #[test]
+    fn test_modulereference() {
+        typereference_like_tests(modulereference, ModuleReference::new);
+    }
+
     #[test]
     fn test_newline() {
         assert_eq!(newline("\n"), done_result!("\n"));
         assert_eq!(newline("\x0B"), done_result!("\x0B"));
     }
+
+
 
     #[test]
     fn test_take_until_single_line_comment_end() {
@@ -448,77 +523,6 @@ mod tests {
         // Leading zero in exponent
         assert_eq!(realnumber("1.1E-03"), Done("3", 1.1));
         assert_eq!(realnumber("1.1E03"), Done("3", 1.1));
-    }
-
-    /// Run tests for parsers which behave like `Identifier`. Currently, this is only `Identifier`
-    /// and `ValueReference`.
-    fn identifier_like_tests<F, T, N>(parser: F, struct_maker: N)
-    where
-        T: Debug + PartialEq,
-        F: Fn(&str) -> IResult<&str, T>,
-        N: Fn(&'static str) -> T,
-    {
-        assert_eq!(parser("a"), done_result!(struct_maker("a")));
-        assert_eq!(parser("aB3"), done_result!(struct_maker("aB3")));
-        assert_eq!(parser("aB3-"), Done("-", struct_maker("aB3")));
-        assert_eq!(
-            parser("dash-middle"),
-            done_result!(struct_maker("dash-middle"))
-        );
-        assert_eq!(parser("space "), Done(" ", struct_maker("space")));
-        assert_eq!(
-            parser("double--hypen"),
-            Done("--hypen", struct_maker("double"))
-        );
-        assert_eq!(parser("-start"), Error(ErrorKind::RegexpFind));
-        assert_eq!(parser("Capital"), Error(ErrorKind::RegexpFind));
-    }
-
-    #[test]
-    fn test_identifier() {
-        identifier_like_tests(identifier, Identifier::new);
-    }
-
-    #[test]
-    fn test_valuereference() {
-        identifier_like_tests(valuereference, ValueReference::new)
-    }
-
-    /// Run tests for parsers which behave like `TypeReference`. Currently, this is only
-    /// `TypeReference` and `ModuleReference`.
-    fn typereference_like_tests<F, T, N>(parser: F, struct_maker: N)
-    where
-        T: Debug + PartialEq,
-        F: Fn(&str) -> IResult<&str, T>,
-        N: Fn(&'static str) -> T,
-    {
-        assert_eq!(parser("A"), done_result!(struct_maker("A")));
-        assert_eq!(parser("Good"), done_result!(struct_maker("Good")));
-        assert_eq!(
-            parser("With-Dashes"),
-            done_result!(struct_maker("With-Dashes"))
-        );
-        assert_eq!(parser("SpaCe "), Done(" ", struct_maker("SpaCe")));
-        assert_eq!(
-            parser("DOUBLE--hypen"),
-            Done("--hypen", struct_maker("DOUBLE"))
-        );
-        assert_eq!(parser("-start"), Error(ErrorKind::RegexpFind));
-        assert_eq!(parser("lower"), Error(ErrorKind::RegexpFind));
-        assert_eq!(parser("lower"), Error(ErrorKind::RegexpFind));
-
-        // ABSENT is a reserved word
-        assert_eq!(parser("ABSENT"), Error(ErrorKind::Verify));
-    }
-
-    #[test]
-    fn test_typereference() {
-        typereference_like_tests(typereference, TypeReference::new);
-    }
-
-    #[test]
-    fn test_modulereference() {
-        typereference_like_tests(modulereference, ModuleReference::new);
     }
 
     #[test]
