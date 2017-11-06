@@ -323,6 +323,37 @@ named!(xmlhstring<&str, Vec<u8> >,
             acc
         }));
 
+/// Parse one line of a `cstring`. Needs to return a `String` because it may need to replace escaped
+/// characters. Parses up to, but not including, a `"` or newline. Eats any trailing whitespace
+/// before a newline.
+named!(string_single_line<&str, String>,
+    fold_many0!(
+        alt!(
+            is_not_s!("\"\n\x0B\x0C\x0D") |
+            map!(
+                complete!(tag_s!("\"\"")),
+                |_| "\"")),
+        String::new(),
+        |mut acc: String, item| {
+            acc.push_str(item);
+            acc
+        }));
+
+/// Parse the characters of a `cstring` as defined in §12.14.
+///
+/// The `cstring` type may span multiple lines and is enclosed by double quotes. A pair of double
+/// quotes is used to escape a single `"` character. Newlines and the spaces around them are
+/// ignored.
+///
+/// Does not handle any of the "printed representation" special cases documented in §12.14.2. Why a
+/// computer protocol specification would worry so much about printed representations is a mystery.
+//named!(plain_cstring<&str, &str>,
+//    preceded!(
+//        tag_s!("\""),
+//
+//    )
+//);
+
 #[cfg(test)]
 mod tests {
     #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -340,6 +371,10 @@ mod tests {
             IResult::Done("", $res)
         )
     );
+
+    fn done_string(s: &str) -> IResult<&str, String> {
+        IResult::Done("", s.to_string())
+    }
 
     /// Run tests for parsers which behave like `TypeReference`. Currently, this is only
     /// `TypeReference` and `ModuleReference`.
@@ -657,5 +692,17 @@ mod tests {
         );
 
         assert_eq!(xmlhstring("'01101100'"), Done("'01101100'", vec![]));
+    }
+
+    #[test]
+    fn test_string_single_line() {
+        assert_eq!(string_single_line("hi there"), done_string("hi there"));
+        assert_eq!(string_single_line("quote \"\" escape"), done_string("quote \" escape"));
+
+        // Stops at newline
+        assert_eq!(string_single_line("some \"\"\nmore"), Done("\nmore", "some \"".to_string()));
+
+        // Strips spaces before newline
+        //assert_eq!(string_single_line("some \"\" \t\nmore"), Done("\nmore", "some \"".to_string()));
     }
 }
