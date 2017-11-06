@@ -113,27 +113,6 @@ fn offset<T: AsRef<[u8]>>(base: T, sub: T) -> usize {
     snd as usize - fst as usize
 }
 
-/// Version of `recognize!` macro that can be used for strings.
-macro_rules! recognize_s (
-  ($i:expr, $submac:ident!( $($args:tt)* )) => (
-    {
-      use ::nom::IResult;
-      match $submac!($i, $($args)*) {
-        IResult::Done(i,_) => {
-          let index = offset($i, i);
-
-          IResult::Done(i, &($i)[..index])
-        },
-        IResult::Error(e)      => return IResult::Error(e),
-        IResult::Incomplete(i) => return IResult::Incomplete(i)
-      }
-    }
-  );
-  ($i:expr, $f:expr) => (
-    recognize_s!($i, call!($f))
-  );
-);
-
 /// Parse a multi-line comment. Multi-line comments in ASN.1 can be nested arbitrarily, so the
 /// following is a valid comment:
 ///
