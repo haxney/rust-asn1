@@ -1,6 +1,7 @@
 use std::str::FromStr;
 use nom::{IResult, Needed};
-use types::{Identifier, TypeReference, RESERVED_WORDS, ValueReference, ModuleReference};
+use types::{Identifier, TypeReference, RESERVED_WORDS, ValueReference, ModuleReference,
+            EncodingReference};
 use bit_vec::BitVec;
 
 /// Returns `true` if the character is a newline character according to ASN.1.
@@ -38,7 +39,7 @@ named!(newline<&str, &str>,
 fn is_separator(ch: char) -> bool {
     match ch {
         ' ' | '\t' | '\u{A0}' => true,
-        _ => false
+        _ => false,
     }
 }
 
@@ -393,6 +394,14 @@ named!(xmltstring<&str, &str>, call!(tstring));
 
 /// Parser for `psname` as defined in §12.19.
 named!(psname<&str, &str>, call!(upper_identifier));
+
+/// Parser for `encodingreference` as defined in §12.25.
+named!(encodingreference<&str, EncodingReference>,
+    map!(
+        verify!(
+            re_find!(r"^[A-Z]([A-Z0-9]+|-[a-zA-Z0-9])*"),
+            |ref_name| !RESERVED_WORDS.contains(ref_name)),
+        EncodingReference::new));
 
 #[cfg(test)]
 mod tests {
@@ -766,5 +775,28 @@ mod tests {
         assert_eq!(simplestring("\"some\nmore\""), done_result!("some\nmore"));
 
         assert_eq!(simplestring("\"missing close"), Incomplete(Needed::Size(15)));
+    }
+
+    #[test]
+    fn test_encodingreference() {
+        assert_eq!(encodingreference("A"), done_result!(EncodingReference::new("A")));
+
+        // Contains lowercase letters
+        assert_eq!(encodingreference("Good"), Done("ood", EncodingReference::new("G")));
+        assert_eq!(
+            encodingreference("WITH-DASHES"),
+            done_result!(EncodingReference::new("WITH-DASHES"))
+        );
+        assert_eq!(encodingreference("SpaCe "), Done("paCe ", EncodingReference::new("S")));
+        assert_eq!(
+            encodingreference("DOUBLE--hypen"),
+            Done("--hypen", EncodingReference::new("DOUBLE"))
+        );
+        assert_eq!(encodingreference("-start"), Error(ErrorKind::RegexpFind));
+        assert_eq!(encodingreference("lower"), Error(ErrorKind::RegexpFind));
+        assert_eq!(encodingreference("lower"), Error(ErrorKind::RegexpFind));
+
+        // ABSENT is a reserved word
+        assert_eq!(encodingreference("ABSENT"), Error(ErrorKind::Verify));
     }
 }

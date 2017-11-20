@@ -52,6 +52,15 @@ impl ModuleReference {
     }
 }
 
+/// An `encodingreference` lexical item as specified by X.680 §12.25.
+#[derive(Debug, Eq, PartialEq)]
+pub struct EncodingReference(String);
+
+impl EncodingReference {
+    pub fn new<S: Into<String>>(name: S) -> EncodingReference {
+        EncodingReference(name.into())
+    }
+}
 
 lazy_static! {
 /// Reserved keywords as specified in §12.38
