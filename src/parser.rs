@@ -3,15 +3,6 @@
 use lexer::{number, identifier, modulereference, whitespace, noninteger_unicode_label};
 use types::{ModuleIdentifier, DefinitiveObjIdComponent, DefinitiveIdentification, ArcIdentifier};
 
-named!(module_identifier<&str, ModuleIdentifier>,
-    do_parse!(
-        name: modulereference >>
-        idents: opt!(definitive_identification) >>
-        (ModuleIdentifier {
-            module_reference: name,
-            definitive_identification: idents
-        })));
-
 named!(definitive_oid_component<&str, DefinitiveObjIdComponent>,
     alt!(
         complete!(asn_ws!(pair!(identifier, delimited!(tag_s!("("), number, tag_s!(")")))))
@@ -49,6 +40,16 @@ named!(definitive_identification<&str, DefinitiveIdentification>,
                 obj_id_components: oids,
                 iri: iri_list.unwrap_or(vec![]),
             }))));
+
+named!(module_identifier<&str, ModuleIdentifier>,
+   asn_ws!(
+       do_parse!(
+           name: modulereference >>
+           idents: opt!(definitive_identification) >>
+           (ModuleIdentifier {
+               module_reference: name,
+               definitive_identification: idents
+           }))));
 
 #[cfg(test)]
 mod tests {
