@@ -53,7 +53,7 @@ fn is_whitespace(ch: char) -> bool {
 }
 
 /// Parse whitespace according to §12.1.6
-named!(whitespace<&str, &str>, take_while_s!(is_whitespace));
+named!(pub whitespace<&str, &str>, take_while_s!(is_whitespace));
 
 /// Input consuming macro to wrap a matcher. This is a version of nom's `ws!` macro using the
 /// whitespace set of ASN.1.
@@ -86,13 +86,13 @@ named!(identifier_str<&str, &str>, re_find!(r"^[a-z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*
 ///
 /// Starts with a lowercase letter, can contain letters, digits, or hyphens, but cannot contain a
 /// double hyphen or end with a hyphen.
-named!(identifier<&str, Identifier>, map!(identifier_str, Identifier::new));
+named!(pub identifier<&str, Identifier>, map!(identifier_str, Identifier::new));
 
 /// Parse a `ValueReference` according to §12.4.
 named!(valuereference<&str, ValueReference>, map!(identifier_str, ValueReference::new));
 
 /// Parse a `ModuleReference` according to §12.5.
-named!(modulereference<&str, ModuleReference>, map!(typereference_str, ModuleReference::new));
+named!(pub modulereference<&str, ModuleReference>, map!(typereference_str, ModuleReference::new));
 
 /// Takes input until it finds the end of a single-line comment. This will not consume the ending
 /// character(s) of the comment.
@@ -257,7 +257,7 @@ named!(comment<&str, &str>,
 /// Parse an integer.
 ///
 /// Defined in X.680 §12.8.
-named!(number<&str, u64>,
+named!(pub number<&str, u64>,
     map_res!(
         re_find!(r"^(0|[1-9]\d*)"),
         FromStr::from_str
@@ -471,7 +471,7 @@ fn non_integer_unicode_valid(name: &str) -> bool {
 }
 
 /// Lexer for `non-integerUnicodeLabel` as defined in §12.27 and X.660 §7.5.
-named!(noninteger_unicode_label<&str, NonIntegerUnicodeLabel>,
+named!(pub noninteger_unicode_label<&str, NonIntegerUnicodeLabel>,
     map!(
         verify!(
             take_while1_s!(non_integer_unicode_char),
