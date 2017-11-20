@@ -1,7 +1,7 @@
 use std::str::FromStr;
 use nom::{IResult, Needed};
 use types::{Identifier, TypeReference, RESERVED_WORDS, ValueReference, ModuleReference,
-            EncodingReference};
+            EncodingReference, NonIntegerUnicodeLabel};
 use bit_vec::BitVec;
 
 /// Returns `true` if the character is a newline character according to ASN.1.
@@ -403,6 +403,81 @@ named!(encodingreference<&str, EncodingReference>,
             |ref_name| !RESERVED_WORDS.contains(ref_name)),
         EncodingReference::new));
 
+/// Lexer for the character ranges for a non-integer unicode label as defined in X.660 §7.5.2.
+fn non_integer_unicode_char(ch: char) -> bool {
+    match ch {
+        '-' |
+        '.' |
+        '_' |
+        '~' |
+        '0'...'9' |
+        'A'...'Z' |
+        'a'...'z' |
+        '\u{000A0}'...'\u{0D7AF}' |
+        '\u{0F900}'...'\u{0FDCF}' |
+        '\u{0FDF0}'...'\u{0FFEF}' |
+        '\u{10000}'...'\u{1FFFD}' |
+        '\u{20000}'...'\u{2FFFD}' |
+        '\u{30000}'...'\u{3FFFD}' |
+        '\u{40000}'...'\u{4FFFD}' |
+        '\u{50000}'...'\u{5FFFD}' |
+        '\u{60000}'...'\u{6FFFD}' |
+        '\u{70000}'...'\u{7FFFD}' |
+        '\u{80000}'...'\u{8FFFD}' |
+        '\u{90000}'...'\u{9FFFD}' |
+        '\u{A0000}'...'\u{AFFFD}' |
+        '\u{B0000}'...'\u{BFFFD}' |
+        '\u{C0000}'...'\u{CFFFD}' |
+        '\u{D0000}'...'\u{DFFFD}' |
+        '\u{E1000}'...'\u{EFFFD}' => true,
+        _ => false,
+    }
+}
+
+/// Returns `true` if `name` adheres to the rules of X.660 §7.5. Assumes that the characters are in
+/// the proper ranges as verified by `non_integer_unicode_char`.
+fn non_integer_unicode_valid(name: &str) -> bool {
+    // TODO(haxney): Use one iteration for whole function.
+
+    // §7.5.1: not all characters are 0-9
+    if !name.chars().any(|ch| !ch.is_digit(10)) {
+        return false;
+    }
+
+    // §7.5.4: Does not start with `HYPHEN MINUS`
+    let mut chars = name.chars();
+    if let Some(ch) = chars.next() {
+        if ch == '-' {
+            return false;
+        }
+    }
+
+    // The third and fourth characters may not be `HYPHEN MINUS`.
+    chars.next();
+    let third = chars.next();
+    let fourth = chars.next();
+    if let (Some(third_char), Some(fourth_char)) = (third, fourth) {
+        if third_char == '-' && fourth_char == '-' {
+            return false;
+        }
+    }
+
+    // Does not end with `HYPHEN MINUS`.
+    if let Some(last) = name.chars().last() {
+        last != '-'
+    } else {
+        true
+    }
+}
+
+/// Lexer for `non-integerUnicodeLabel` as defined in §12.27 and X.660 §7.5.
+named!(noninteger_unicode_label<&str, NonIntegerUnicodeLabel>,
+    map!(
+        verify!(
+            take_while1_s!(non_integer_unicode_char),
+            non_integer_unicode_valid),
+        NonIntegerUnicodeLabel::new));
+
 #[cfg(test)]
 mod tests {
     #[cfg_attr(rustfmt, rustfmt_skip)]
@@ -428,10 +503,10 @@ mod tests {
     /// Run tests for parsers which behave like `TypeReference`. Currently, this is only
     /// `TypeReference` and `ModuleReference`.
     fn typereference_like_tests<F, T, N>(parser: F, struct_maker: N)
-    where
-        T: Debug + PartialEq,
-        F: Fn(&str) -> IResult<&str, T>,
-        N: Fn(&'static str) -> T,
+        where
+            T: Debug + PartialEq,
+            F: Fn(&str) -> IResult<&str, T>,
+            N: Fn(&'static str) -> T,
     {
         assert_eq!(parser("A"), done_result!(struct_maker("A")));
         assert_eq!(parser("Good"), done_result!(struct_maker("Good")));
@@ -455,10 +530,10 @@ mod tests {
     /// Run tests for parsers which behave like `Identifier`. Currently, this is only `Identifier`
     /// and `ValueReference`.
     fn identifier_like_tests<F, T, N>(parser: F, struct_maker: N)
-    where
-        T: Debug + PartialEq,
-        F: Fn(&str) -> IResult<&str, T>,
-        N: Fn(&'static str) -> T,
+        where
+            T: Debug + PartialEq,
+            F: Fn(&str) -> IResult<&str, T>,
+            N: Fn(&'static str) -> T,
     {
         assert_eq!(parser("a"), done_result!(struct_maker("a")));
         assert_eq!(parser("aB3"), done_result!(struct_maker("aB3")));
@@ -503,7 +578,6 @@ mod tests {
     }
 
 
-
     #[test]
     fn test_take_until_single_line_comment_end() {
         assert_eq!(
@@ -539,8 +613,8 @@ mod tests {
     }
 
     fn single_line_comment_tests<F>(parser: F)
-    where
-        F: Fn(&str) -> IResult<&str, &str>,
+        where
+            F: Fn(&str) -> IResult<&str, &str>,
     {
         assert_eq!(parser("-- thing\nmore"), Done("more", " thing"));
         assert_eq!(parser("-- thing--"), done_result!(" thing"));
@@ -578,8 +652,8 @@ mod tests {
     }
 
     fn multi_line_comment_tests<F>(parser: F)
-    where
-        F: Fn(&str) -> IResult<&str, &str>,
+        where
+            F: Fn(&str) -> IResult<&str, &str>,
     {
         assert_eq!(parser("/* stuff */"), done_result!(" stuff "));
         assert_eq!(parser("/* line1\nline2 */"), done_result!(" line1\nline2 "));
@@ -798,5 +872,28 @@ mod tests {
 
         // ABSENT is a reserved word
         assert_eq!(encodingreference("ABSENT"), Error(ErrorKind::Verify));
+    }
+
+    #[test]
+    fn test_noninteger_unicode_label() {
+        assert_eq!(noninteger_unicode_label("A"), done_result!(NonIntegerUnicodeLabel::new("A")));
+
+        assert_eq!(noninteger_unicode_label("A0\u{FDF0}"),
+                   done_result!(NonIntegerUnicodeLabel::new("A0\u{FDF0}")));
+
+        // Must not contain only digits
+        assert_eq!(noninteger_unicode_label("012349"), Error(ErrorKind::Verify));
+
+        // Must not start or end with `HYPHEN MINUS`
+        assert_eq!(noninteger_unicode_label("-A"), Error(ErrorKind::Verify));
+        assert_eq!(noninteger_unicode_label("A-"), Error(ErrorKind::Verify));
+        assert_eq!(noninteger_unicode_label("-A-"), Error(ErrorKind::Verify));
+
+        // Must not have hyphens in both third and fourth position
+        assert_eq!(noninteger_unicode_label("Ab--DE"), Error(ErrorKind::Verify));
+
+        // May have hyphens elsewhere
+        assert_eq!(noninteger_unicode_label("Stuff--things"),
+                   done_result!(NonIntegerUnicodeLabel::new("Stuff--things")));
     }
 }

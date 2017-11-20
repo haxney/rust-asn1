@@ -62,6 +62,16 @@ impl EncodingReference {
     }
 }
 
+/// A `non-integerUnicodeLabel` lexical item as specified by X.680 §12.27 and X.660 §7.5.
+#[derive(Debug, Eq, PartialEq)]
+pub struct NonIntegerUnicodeLabel(String);
+
+impl NonIntegerUnicodeLabel {
+    pub fn new<S: Into<String>>(name: S) -> NonIntegerUnicodeLabel {
+        NonIntegerUnicodeLabel(name.into())
+    }
+}
+
 lazy_static! {
 /// Reserved keywords as specified in §12.38
 pub static ref RESERVED_WORDS: HashSet<&'static str> = vec![
