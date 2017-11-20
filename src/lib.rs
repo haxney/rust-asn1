@@ -13,5 +13,7 @@ extern crate lazy_static;
 extern crate regex;
 extern crate bit_vec;
 
+#[macro_use]
 mod lexer;
+mod parser;
 pub mod types;

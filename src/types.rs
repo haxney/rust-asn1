@@ -168,3 +168,51 @@ pub static ref RESERVED_WORDS: HashSet<&'static str> = vec![
     "RELATIVE-OID-IRI",
   ].into_iter().collect();
 }
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct ModuleIdentifier {
+    pub module_reference: ModuleReference,
+    pub definitive_identification: Option<DefinitiveIdentification>,
+}
+
+/// An identifier for one segment of an OID hierarchy.
+#[derive(Debug, Eq, PartialEq)]
+pub enum ArcIdentifier {
+    IntegerLabel(u64),
+    NonIntegerLabel(NonIntegerUnicodeLabel),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct DefinitiveIdentification {
+    pub obj_id_components: Vec<DefinitiveObjIdComponent>,
+
+    /// IRI path. May be empty
+    pub iri: Vec<ArcIdentifier>,
+}
+
+impl DefinitiveIdentification {
+    pub fn new_no_iri(obj_ids: Vec<DefinitiveObjIdComponent>) -> DefinitiveIdentification {
+        DefinitiveIdentification {
+            obj_id_components: obj_ids,
+            iri: vec![],
+        }
+    }
+
+    pub fn new(
+        obj_ids: Vec<DefinitiveObjIdComponent>,
+        iri: Vec<ArcIdentifier>,
+    ) -> DefinitiveIdentification {
+        DefinitiveIdentification {
+            obj_id_components: obj_ids,
+            iri: iri,
+        }
+    }
+}
+
+/// A component of a Definitive Object ID list.
+#[derive(Debug, Eq, PartialEq)]
+pub enum DefinitiveObjIdComponent {
+    NameForm(Identifier),
+    NumberForm(u64),
+    NameAndNumberForm(Identifier, u64),
+}
