@@ -503,10 +503,10 @@ mod tests {
     /// Run tests for parsers which behave like `TypeReference`. Currently, this is only
     /// `TypeReference` and `ModuleReference`.
     fn typereference_like_tests<F, T, N>(parser: F, struct_maker: N)
-        where
-            T: Debug + PartialEq,
-            F: Fn(&str) -> IResult<&str, T>,
-            N: Fn(&'static str) -> T,
+    where
+        T: Debug + PartialEq,
+        F: Fn(&str) -> IResult<&str, T>,
+        N: Fn(&'static str) -> T,
     {
         assert_eq!(parser("A"), done_result!(struct_maker("A")));
         assert_eq!(parser("Good"), done_result!(struct_maker("Good")));
@@ -530,10 +530,10 @@ mod tests {
     /// Run tests for parsers which behave like `Identifier`. Currently, this is only `Identifier`
     /// and `ValueReference`.
     fn identifier_like_tests<F, T, N>(parser: F, struct_maker: N)
-        where
-            T: Debug + PartialEq,
-            F: Fn(&str) -> IResult<&str, T>,
-            N: Fn(&'static str) -> T,
+    where
+        T: Debug + PartialEq,
+        F: Fn(&str) -> IResult<&str, T>,
+        N: Fn(&'static str) -> T,
     {
         assert_eq!(parser("a"), done_result!(struct_maker("a")));
         assert_eq!(parser("aB3"), done_result!(struct_maker("aB3")));
@@ -613,8 +613,8 @@ mod tests {
     }
 
     fn single_line_comment_tests<F>(parser: F)
-        where
-            F: Fn(&str) -> IResult<&str, &str>,
+    where
+        F: Fn(&str) -> IResult<&str, &str>,
     {
         assert_eq!(parser("-- thing\nmore"), Done("more", " thing"));
         assert_eq!(parser("-- thing--"), done_result!(" thing"));
@@ -652,8 +652,8 @@ mod tests {
     }
 
     fn multi_line_comment_tests<F>(parser: F)
-        where
-            F: Fn(&str) -> IResult<&str, &str>,
+    where
+        F: Fn(&str) -> IResult<&str, &str>,
     {
         assert_eq!(parser("/* stuff */"), done_result!(" stuff "));
         assert_eq!(parser("/* line1\nline2 */"), done_result!(" line1\nline2 "));
