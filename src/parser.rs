@@ -1,7 +1,10 @@
 //! Defines the AST of the ASN.1 file.
 
-use lexer::{number, identifier, modulereference, whitespace, noninteger_unicode_label};
-use types::{ModuleIdentifier, DefinitiveObjIdComponent, DefinitiveIdentification, ArcIdentifier};
+use lexer::{number, identifier, modulereference, whitespace, noninteger_unicode_label,
+            typereference, valuereference, objectclassreference, objectreference,
+            objectsetreference};
+use types::{ModuleIdentifier, DefinitiveObjIdComponent, DefinitiveIdentification, ArcIdentifier,
+            Symbol, Reference, ValueReference, TypeReference};
 
 named!(definitive_oid_component<&str, DefinitiveObjIdComponent>,
     alt!(
@@ -50,6 +53,20 @@ named!(module_identifier<&str, ModuleIdentifier>,
                module_reference: name,
                definitive_identification: idents
            }))));
+
+named!(reference<&str, Reference>,
+    alt!(
+        typereference => { |val| Reference::Type(val) } |
+        valuereference => { |val| Reference::Value(val) } |
+        objectclassreference => { |val| Reference::ObjectClass(val) } |
+        objectreference => { |val| Reference::Object(val) } |
+        objectsetreference => { |val| Reference::ObjectSet(val) }));
+
+named!(symbol<&str, Symbol>,
+    alt!(
+        complete!(asn_ws!(terminated!(reference, tuple!(tag_s!("{"), tag_s!("}")))))
+            => { |val| Symbol::ParameterizedRef(val) } |
+        reference => { |val| Symbol::Ref(val) }));
 
 #[cfg(test)]
 mod tests {
@@ -167,5 +184,17 @@ mod tests {
                         non_int_label("thing"),
                         non_int_label("other"),
                         IntegerLabel(4)])));
+    }
+
+    #[test]
+    fn test_symbol() {
+        assert_eq!(symbol("alice"),
+                   done(Symbol::Ref(Reference::Value(ValueReference::new("alice")))));
+
+        assert_eq!(symbol("BOB"),
+                   done(Symbol::Ref(Reference::Type(TypeReference::new("BOB")))));
+
+        assert_eq!(symbol("Carol { }"),
+                   done(Symbol::ParameterizedRef(Reference::Type(TypeReference::new("Carol")))));
     }
 }

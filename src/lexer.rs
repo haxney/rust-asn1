@@ -1,7 +1,8 @@
 use std::str::FromStr;
 use nom::{IResult, Needed};
 use types::{Identifier, TypeReference, RESERVED_WORDS, ValueReference, ModuleReference,
-            EncodingReference, NonIntegerUnicodeLabel};
+            EncodingReference, NonIntegerUnicodeLabel, ObjectClassReference, ObjectReference,
+            ObjectSetReference};
 use bit_vec::BitVec;
 
 /// Returns `true` if the character is a newline character according to ASN.1.
@@ -66,17 +67,28 @@ macro_rules! asn_ws (
 );
 
 /// An identifier-like sequence that begins with an uppercase letter.
-named!(upper_identifier<&str, &str>,
+named!(upper_start_identifier<&str, &str>,
     re_find!(r"^[A-Z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"));
+
+/// An identifier-like sequence that contains only uppercase letters.
+named!(upper_identifier<&str, &str>,
+    re_find!(r"^[A-Z]([A-Z0-9]+|-[A-Z0-9])*"));
 
 // Parse a `typereference` string and filters out `RESERVED_WORDS`.
 named!(typereference_str<&str, &str>,
+    verify!(
+        upper_start_identifier,
+        |ref_name| !RESERVED_WORDS.contains(ref_name)));
+
+/// A `typereference`-like string that only contains uppercase letters and does not match
+/// `RESERVED_WORDS`.
+named!(typereference_upper_str<&str, &str>,
     verify!(
         upper_identifier,
         |ref_name| !RESERVED_WORDS.contains(ref_name)));
 
 /// Parse a `TypeReference` according to §12.2.
-named!(typereference<&str, TypeReference>, map!(typereference_str, TypeReference::new));
+named!(pub typereference<&str, TypeReference>, map!(typereference_str, TypeReference::new));
 
 
 // Parse an identifier as a string.
@@ -89,7 +101,7 @@ named!(identifier_str<&str, &str>, re_find!(r"^[a-z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*
 named!(pub identifier<&str, Identifier>, map!(identifier_str, Identifier::new));
 
 /// Parse a `ValueReference` according to §12.4.
-named!(valuereference<&str, ValueReference>, map!(identifier_str, ValueReference::new));
+named!(pub valuereference<&str, ValueReference>, map!(identifier_str, ValueReference::new));
 
 /// Parse a `ModuleReference` according to §12.5.
 named!(pub modulereference<&str, ModuleReference>, map!(typereference_str, ModuleReference::new));
@@ -393,15 +405,24 @@ named!(xmltstring<&str, &str>, call!(tstring));
 
 
 /// Parser for `psname` as defined in §12.19.
-named!(psname<&str, &str>, call!(upper_identifier));
+named!(psname<&str, &str>, call!(upper_start_identifier));
 
 /// Parser for `encodingreference` as defined in §12.25.
 named!(encodingreference<&str, EncodingReference>,
-    map!(
-        verify!(
-            re_find!(r"^[A-Z]([A-Z0-9]+|-[a-zA-Z0-9])*"),
-            |ref_name| !RESERVED_WORDS.contains(ref_name)),
-        EncodingReference::new));
+    map!(typereference_upper_str, EncodingReference::new));
+
+/// Parser for `objectclassreference` as defined in X.681 §7.1
+named!(pub objectclassreference<&str, ObjectClassReference>,
+    map!(typereference_upper_str, ObjectClassReference::new));
+
+/// Parser for `objectreference` as defined in X.681 §7.2
+named!(pub objectreference<&str, ObjectReference>,
+    map!(identifier_str, ObjectReference::new));
+
+/// Parser for `objectsetreference` as defined in X.681 §7.3
+named!(pub objectsetreference<&str, ObjectSetReference>,
+    map!(typereference_str, ObjectSetReference::new));
+
 
 /// Lexer for the character ranges for a non-integer unicode label as defined in X.660 §7.5.2.
 fn non_integer_unicode_char(ch: char) -> bool {

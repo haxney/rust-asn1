@@ -72,6 +72,46 @@ impl NonIntegerUnicodeLabel {
     }
 }
 
+/// An `objectclassreference` lexical item as specified by X.681 §7.1
+#[derive(Debug, PartialEq, Eq)]
+pub struct ObjectClassReference(String);
+
+impl ObjectClassReference {
+    pub fn new<S>(name: S) -> ObjectClassReference
+    where
+        S: Into<String>,
+    {
+        ObjectClassReference(name.into())
+    }
+}
+
+/// An `objectreference` lexical item as specified by X.681 §7.2
+#[derive(Debug, PartialEq, Eq)]
+pub struct ObjectReference(String);
+
+impl ObjectReference {
+    pub fn new<S>(name: S) -> ObjectReference
+    where
+        S: Into<String>,
+    {
+        ObjectReference(name.into())
+    }
+}
+
+/// An `objectsetreference` lexical item as specified by X.681 §7.3
+#[derive(Debug, Eq, PartialEq)]
+pub struct ObjectSetReference(String);
+
+
+impl ObjectSetReference {
+    pub fn new<S>(name: S) -> ObjectSetReference
+    where
+        S: Into<String>,
+    {
+        ObjectSetReference(name.into())
+    }
+}
+
 lazy_static! {
 /// Reserved keywords as specified in §12.38
 pub static ref RESERVED_WORDS: HashSet<&'static str> = vec![
@@ -215,4 +255,28 @@ pub enum DefinitiveObjIdComponent {
     NameForm(Identifier),
     NumberForm(u64),
     NameAndNumberForm(Identifier, u64),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum Reference {
+    Type(TypeReference),
+    Value(ValueReference),
+    ObjectClass(ObjectClassReference),
+    Object(ObjectReference),
+    ObjectSet(ObjectSetReference),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum Symbol {
+    Ref(Reference),
+
+    /// A `ParameterizedRef` is the same as a `Reference`, but is distinguished in the grammar.
+    ParameterizedRef(Reference),
+}
+
+/// Exported symbols.
+#[derive(Debug, Eq, PartialEq)]
+pub enum Exports {
+    AllExported,
+    SymbolsExported(Vec<Symbol>),
 }
