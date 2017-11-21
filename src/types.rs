@@ -277,6 +277,9 @@ pub enum Symbol {
 /// Exported symbols.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Exports {
+    /// All symbols are exported.
     AllExported,
+
+    /// Specific list of symbols. May be empty.
     SymbolsExported(Vec<Symbol>),
 }

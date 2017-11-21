@@ -4,7 +4,7 @@ use lexer::{number, identifier, modulereference, whitespace, noninteger_unicode_
             typereference, valuereference, objectclassreference, objectreference,
             objectsetreference};
 use types::{ModuleIdentifier, DefinitiveObjIdComponent, DefinitiveIdentification, ArcIdentifier,
-            Symbol, Reference, ValueReference, TypeReference};
+            Symbol, Reference, ValueReference, TypeReference, Exports};
 
 named!(definitive_oid_component<&str, DefinitiveObjIdComponent>,
     alt!(
@@ -67,6 +67,22 @@ named!(symbol<&str, Symbol>,
         complete!(asn_ws!(terminated!(reference, tuple!(tag_s!("{"), tag_s!("}")))))
             => { |val| Symbol::ParameterizedRef(val) } |
         reference => { |val| Symbol::Ref(val) }));
+
+named!(symbol_list<&str, Vec<Symbol> >,
+    // Doesn't work with `separated_list_complete!` for some reason.
+    asn_ws!(separated_list!(complete!(tag_s!(",")), complete!(symbol))));
+
+named!(exports<&str, Exports>,
+    asn_ws!(
+        alt!(
+            delimited!(
+                tag_s!("EXPORTS"),
+                symbol_list,
+                tag_s!(";")) => { |list| Exports::SymbolsExported(list) } |
+            delimited!(
+                tag_s!("EXPORTS"),
+                tag_s!("ALL"),
+                tag_s!(";")) => { |_| Exports::AllExported })));
 
 #[cfg(test)]
 mod tests {
@@ -186,15 +202,55 @@ mod tests {
                         IntegerLabel(4)])));
     }
 
+    fn type_sym(name: &str) -> Symbol {
+        Symbol::Ref(Reference::Type(TypeReference::new(name)))
+    }
+
+    fn value_sym(name: &str) -> Symbol {
+        Symbol::Ref(Reference::Value(ValueReference::new(name)))
+    }
+
+    fn type_sym_param(name: &str) -> Symbol {
+        Symbol::ParameterizedRef(Reference::Type(TypeReference::new(name)))
+    }
+
     #[test]
     fn test_symbol() {
-        assert_eq!(symbol("alice"),
-                   done(Symbol::Ref(Reference::Value(ValueReference::new("alice")))));
+        assert_eq!(symbol("alice"), done(value_sym("alice")));
 
-        assert_eq!(symbol("BOB"),
-                   done(Symbol::Ref(Reference::Type(TypeReference::new("BOB")))));
+        assert_eq!(symbol("BOB"), done(type_sym("BOB")));
 
-        assert_eq!(symbol("Carol { }"),
-                   done(Symbol::ParameterizedRef(Reference::Type(TypeReference::new("Carol")))));
+        assert_eq!(symbol("Carol { }"), done(type_sym_param("Carol")));
+    }
+
+    #[test]
+    fn test_symbol_list() {
+        assert_eq!(
+            symbol_list("OPERATION,ERROR,Rose-PDU{}"),
+            done(
+                vec![
+                    type_sym("OPERATION"),
+                    type_sym("ERROR"),
+                    type_sym_param("Rose-PDU")]));
+
+        assert_eq!(
+            symbol_list("OPERATION, ERROR, Rose-PDU{}"),
+            done(
+                vec![
+                    type_sym("OPERATION"),
+                    type_sym("ERROR"),
+                    type_sym_param("Rose-PDU")]));
+    }
+
+    #[test]
+    fn test_exports() {
+        assert_eq!(exports("EXPORTS ALL ;"), done(Exports::AllExported));
+
+        assert_eq!(
+            exports("EXPORTS OPERATION, ERROR, Rose-PDU{};"),
+            done(Exports::SymbolsExported(vec![
+                type_sym("OPERATION"),
+                type_sym("ERROR"),
+                type_sym_param("Rose-PDU")])));
     }
 }
