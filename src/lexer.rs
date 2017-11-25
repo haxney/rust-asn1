@@ -75,14 +75,14 @@ named!(upper_identifier<&str, &str>,
     re_find!(r"^[A-Z]([A-Z0-9]+|-[A-Z0-9])*"));
 
 // Parse a `typereference` string and filters out `RESERVED_WORDS`.
-named!(typereference_str<&str, &str>,
+named!(pub typereference_str<&str, &str>,
     verify!(
         upper_start_identifier,
         |ref_name| !RESERVED_WORDS.contains(ref_name)));
 
 /// A `typereference`-like string that only contains uppercase letters and does not match
 /// `RESERVED_WORDS`.
-named!(typereference_upper_str<&str, &str>,
+named!(pub typereference_upper_str<&str, &str>,
     verify!(
         upper_identifier,
         |ref_name| !RESERVED_WORDS.contains(ref_name)));
@@ -92,7 +92,7 @@ named!(pub typereference<&str, TypeReference>, map!(typereference_str, TypeRefer
 
 
 // Parse an identifier as a string.
-named!(identifier_str<&str, &str>, re_find!(r"^[a-z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"));
+named!(pub identifier_str<&str, &str>, re_find!(r"^[a-z]([a-zA-Z0-9]+|-[a-zA-Z0-9])*"));
 
 /// Parse an `Identifier` according to §12.3.
 ///

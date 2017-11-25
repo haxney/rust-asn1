@@ -274,6 +274,29 @@ pub enum Symbol {
     ParameterizedRef(Reference),
 }
 
+/// A parsed symbol. Resolution of the symbol to a specific type depends resolving the name to a
+/// specific definition, and so must come at a later stage of analysis.
+#[derive(Debug, Eq, PartialEq)]
+pub enum UnresolvedSymbol {
+    Plain(String),
+    Parameterized(String),
+}
+
+impl UnresolvedSymbol {
+    pub fn plain<S>(name: S) -> UnresolvedSymbol
+    where
+        S: Into<String>,
+    {
+        UnresolvedSymbol::Plain(name.into())
+    }
+    pub fn parameterized<S>(name: S) -> UnresolvedSymbol
+    where
+        S: Into<String>,
+    {
+        UnresolvedSymbol::Parameterized(name.into())
+    }
+}
+
 /// Exported symbols.
 #[derive(Debug, Eq, PartialEq)]
 pub enum Exports {
@@ -281,5 +304,5 @@ pub enum Exports {
     AllExported,
 
     /// Specific list of symbols. May be empty.
-    SymbolsExported(Vec<Symbol>),
+    SymbolsExported(Vec<UnresolvedSymbol>),
 }

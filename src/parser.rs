@@ -1,10 +1,9 @@
 //! Defines the AST of the ASN.1 file.
 
-use lexer::{number, identifier, modulereference, whitespace, noninteger_unicode_label,
-            typereference, valuereference, objectclassreference, objectreference,
-            objectsetreference};
+use lexer::{number, identifier, identifier_str, modulereference, whitespace,
+            noninteger_unicode_label, typereference_str, typereference_upper_str};
 use types::{ModuleIdentifier, DefinitiveObjIdComponent, DefinitiveIdentification, ArcIdentifier,
-            Symbol, Reference, ValueReference, TypeReference, Exports};
+            UnresolvedSymbol, Exports};
 
 named!(definitive_oid_component<&str, DefinitiveObjIdComponent>,
     alt!(
@@ -54,21 +53,16 @@ named!(module_identifier<&str, ModuleIdentifier>,
                definitive_identification: idents
            }))));
 
-named!(reference<&str, Reference>,
-    alt!(
-        typereference => { |val| Reference::Type(val) } |
-        valuereference => { |val| Reference::Value(val) } |
-        objectclassreference => { |val| Reference::ObjectClass(val) } |
-        objectreference => { |val| Reference::Object(val) } |
-        objectsetreference => { |val| Reference::ObjectSet(val) }));
+named!(reference<&str, &str>,
+    alt!(typereference_str | identifier_str | typereference_upper_str));
 
-named!(symbol<&str, Symbol>,
+named!(symbol<&str, UnresolvedSymbol>,
     alt!(
         complete!(asn_ws!(terminated!(reference, tuple!(tag_s!("{"), tag_s!("}")))))
-            => { |val| Symbol::ParameterizedRef(val) } |
-        reference => { |val| Symbol::Ref(val) }));
+            => { |val| UnresolvedSymbol::parameterized(val) } |
+        reference => { |val| UnresolvedSymbol::plain(val) }));
 
-named!(symbol_list<&str, Vec<Symbol> >,
+named!(symbol_list<&str, Vec<UnresolvedSymbol> >,
     // Doesn't work with `separated_list_complete!` for some reason.
     asn_ws!(separated_list!(complete!(tag_s!(",")), complete!(symbol))));
 
@@ -202,25 +196,21 @@ mod tests {
                         IntegerLabel(4)])));
     }
 
-    fn type_sym(name: &str) -> Symbol {
-        Symbol::Ref(Reference::Type(TypeReference::new(name)))
+    fn plain_sym(name: &str) -> UnresolvedSymbol {
+        UnresolvedSymbol::plain(name)
     }
 
-    fn value_sym(name: &str) -> Symbol {
-        Symbol::Ref(Reference::Value(ValueReference::new(name)))
-    }
-
-    fn type_sym_param(name: &str) -> Symbol {
-        Symbol::ParameterizedRef(Reference::Type(TypeReference::new(name)))
+    fn param_sym(name: &str) -> UnresolvedSymbol {
+        UnresolvedSymbol::parameterized(name)
     }
 
     #[test]
     fn test_symbol() {
-        assert_eq!(symbol("alice"), done(value_sym("alice")));
+        assert_eq!(symbol("alice"), done(plain_sym("alice")));
 
-        assert_eq!(symbol("BOB"), done(type_sym("BOB")));
+        assert_eq!(symbol("BOB"), done(plain_sym("BOB")));
 
-        assert_eq!(symbol("Carol { }"), done(type_sym_param("Carol")));
+        assert_eq!(symbol("Carol { }"), done(param_sym("Carol")));
     }
 
     #[test]
@@ -229,17 +219,17 @@ mod tests {
             symbol_list("OPERATION,ERROR,Rose-PDU{}"),
             done(
                 vec![
-                    type_sym("OPERATION"),
-                    type_sym("ERROR"),
-                    type_sym_param("Rose-PDU")]));
+                    plain_sym("OPERATION"),
+                    plain_sym("ERROR"),
+                    param_sym("Rose-PDU")]));
 
         assert_eq!(
             symbol_list("OPERATION, ERROR, Rose-PDU{}"),
             done(
                 vec![
-                    type_sym("OPERATION"),
-                    type_sym("ERROR"),
-                    type_sym_param("Rose-PDU")]));
+                    plain_sym("OPERATION"),
+                    plain_sym("ERROR"),
+                    param_sym("Rose-PDU")]));
     }
 
     #[test]
@@ -249,8 +239,8 @@ mod tests {
         assert_eq!(
             exports("EXPORTS OPERATION, ERROR, Rose-PDU{};"),
             done(Exports::SymbolsExported(vec![
-                type_sym("OPERATION"),
-                type_sym("ERROR"),
-                type_sym_param("Rose-PDU")])));
+                plain_sym("OPERATION"),
+                plain_sym("ERROR"),
+                param_sym("Rose-PDU")])));
     }
 }
