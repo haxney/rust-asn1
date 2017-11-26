@@ -371,12 +371,36 @@ pub enum NamedBitValue {
     Ref(DefinedValue),
 }
 
+/// The type of a CharacterString. Combines both restricted CharacterString types (X.680 §41) and
+/// unrestricted character strings (X.680 §44)
+#[derive(Debug, Eq, PartialEq)]
+pub enum CharacterString {
+    BMPString,
+    GeneralString,
+    GraphicString,
+    IA5String,
+    ISO646String,
+    NumericString,
+    PrintableString,
+    TeletexString,
+    T61String,
+    UniversalString,
+    UTF8String,
+    VideotexString,
+    VisibleString,
+    UnrestrictedString,
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum BuiltinType {
     /// BitString type as defined in X.680 §22.1.
     BitStringType(Vec<NamedBit>),
+
+    /// Boolean type as defined in X.680 §18.1.
     BooleanType,
-    CharacterStringType,
+
+    /// CharacterString type as defined in X.680 §40.1.
+    CharacterStringType(CharacterString),
     ChoiceType,
     DateType,
     DateTimeType,

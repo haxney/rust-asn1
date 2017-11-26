@@ -3,7 +3,8 @@
 use lexer::{number, identifier, identifier_str, modulereference, whitespace,
             noninteger_unicode_label, typereference_str, typereference_upper_str, valuereference};
 use types::{ModuleIdentifier, DefinitiveObjIdComponent, DefinitiveIdentification, ArcIdentifier,
-            UnresolvedSymbol, Exports, NamedBit, NamedBitValue, DefinedValue, ActualParameter};
+            UnresolvedSymbol, Exports, NamedBit, NamedBitValue, DefinedValue, ActualParameter,
+            BuiltinType, CharacterString};
 
 named!(definitive_oid_component<&str, DefinitiveObjIdComponent>,
     alt!(
@@ -136,6 +137,35 @@ named!(
                         named_bit),
                     tag_s!("}"))) >>
             (bit_list.unwrap_or(vec![])))));
+
+/// Parser for `CharacterStringType` as defined in X.680 §40.1.
+named!(
+    character_string<&str, CharacterString>,
+    alt!(
+        tag_s!("BMPString") => { |_| CharacterString::BMPString } |
+        tag_s!("GeneralString") => { |_| CharacterString::GeneralString } |
+        tag_s!("GraphicString") => { |_| CharacterString::GraphicString } |
+        tag_s!("IA5String") => { |_| CharacterString::IA5String } |
+        tag_s!("ISO646String") => { |_| CharacterString::ISO646String } |
+        tag_s!("NumericString") => { |_| CharacterString::NumericString } |
+        tag_s!("PrintableString") => { |_| CharacterString::PrintableString } |
+        tag_s!("TeletexString") => { |_| CharacterString::TeletexString } |
+        tag_s!("T61String") => { |_| CharacterString::T61String } |
+        tag_s!("UniversalString") => { |_| CharacterString::UniversalString } |
+        tag_s!("UTF8String") => { |_| CharacterString::UTF8String } |
+        tag_s!("VideotexString") => { |_| CharacterString::VideotexString } |
+        tag_s!("VisibleString") => { |_| CharacterString::VisibleString } |
+        asn_ws!(tuple!(tag_s!("CHARACTER"), tag_s!("STRING"))) => {
+            |_| CharacterString::UnrestrictedString }));
+
+named!(
+    builtin_type<&str, BuiltinType>,
+    alt_complete!(
+        bitstring_type => { |bitstrings| BuiltinType::BitStringType(bitstrings) } |
+        tag_s!("BOOLEAN") => { |_| BuiltinType::BooleanType } |
+        character_string => { |str_type| BuiltinType::CharacterStringType(str_type) }
+    )
+);
 
 #[cfg(test)]
 mod tests {
