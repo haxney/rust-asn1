@@ -306,3 +306,127 @@ pub enum Exports {
     /// Specific list of symbols. May be empty.
     SymbolsExported(Vec<UnresolvedSymbol>),
 }
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum ActualParameter {
+    Type(Type),
+    Value,
+    ValueSet,
+    DefinedObjectClass,
+    Object,
+    ObjectSet,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct DefinedValue {
+    external_module: Option<ModuleReference>,
+    value: ValueReference,
+    parameters: Vec<ActualParameter>,
+}
+
+impl DefinedValue {
+    pub fn new(
+        external_module: Option<ModuleReference>,
+        value: ValueReference,
+        parameters: Vec<ActualParameter>,
+    ) -> DefinedValue {
+        DefinedValue {
+            external_module: external_module,
+            value: value,
+            parameters: parameters,
+        }
+    }
+
+    pub fn new_val(value: ValueReference) -> DefinedValue {
+        DefinedValue {
+            external_module: Option::None,
+            value: value,
+            parameters: vec![],
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct NamedBit {
+    ident: Identifier,
+    value: NamedBitValue,
+}
+
+impl NamedBit {
+    pub fn new(ident: Identifier, value: NamedBitValue) -> NamedBit {
+        NamedBit {
+            ident: ident,
+            value: value,
+        }
+    }
+
+    pub fn new_tuple((ident, value): (Identifier, NamedBitValue)) -> NamedBit {
+        NamedBit::new(ident, value)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum NamedBitValue {
+    Num(u64),
+    Ref(DefinedValue),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum BuiltinType {
+    /// BitString type as defined in X.680 §22.1.
+    BitStringType(Vec<NamedBit>),
+    BooleanType,
+    CharacterStringType,
+    ChoiceType,
+    DateType,
+    DateTimeType,
+    DurationType,
+    EmbeddedPDVType,
+    EnumeratedType,
+    ExternalType,
+    InstanceOfType,
+    IntegerType,
+    IRIType,
+    NullType,
+    ObjectClassFieldType,
+    ObjectIdentifierType,
+    OctetStringType,
+    RealType,
+    RelativeIRIType,
+    RelativeOIDType,
+    SequenceType,
+    SequenceOfType,
+    SetType,
+    SetOfType,
+    PrefixedType,
+    TimeType,
+    TimeOfDayType,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum ReferencedType {
+    DefinedType,
+    UsefulType,
+    SelectionType,
+    TypeFromObject,
+    ValueSetFromObjects,
+}
+
+/// `ConstrainedType` as defined in X.680 §49.1
+#[derive(Debug, Eq, PartialEq)]
+pub enum ConstrainedType {
+    Builtin(BuiltinType, Constraint),
+    Referenced(ReferencedType, Constraint),
+    // TypeWith(TypeWithConstraint)
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct Constraint();
+
+/// Enum to describe a type.
+#[derive(Debug, Eq, PartialEq)]
+pub enum Type {
+    Builtin(BuiltinType),
+    Referenced(ReferencedType),
+    Constrained(ConstrainedType),
+}

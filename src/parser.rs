@@ -1,9 +1,9 @@
 //! Defines the AST of the ASN.1 file.
 
 use lexer::{number, identifier, identifier_str, modulereference, whitespace,
-            noninteger_unicode_label, typereference_str, typereference_upper_str};
+            noninteger_unicode_label, typereference_str, typereference_upper_str, valuereference};
 use types::{ModuleIdentifier, DefinitiveObjIdComponent, DefinitiveIdentification, ArcIdentifier,
-            UnresolvedSymbol, Exports};
+            UnresolvedSymbol, Exports, NamedBit, NamedBitValue, DefinedValue, ActualParameter};
 
 named!(definitive_oid_component<&str, DefinitiveObjIdComponent>,
     alt!(
@@ -78,11 +78,71 @@ named!(exports<&str, Exports>,
                 tag_s!("ALL"),
                 tag_s!(";")) => { |_| Exports::AllExported })));
 
+/// `ActualParameter` as defined by X.683 §9.5.
+named!(
+    actual_parameter<&str, ActualParameter>,
+    // Temporary placeholders
+    alt!(
+        tag_s!("VALUE") => { |_| ActualParameter::Value } |
+        tag_s!("VALUESET") => { |_| ActualParameter::ValueSet }));
+
+/// `ActualParamterList` as defined in X.683 §9.5.
+named!(
+    actual_parameter_list<&str, Vec<ActualParameter> >,
+    asn_ws!(
+        delimited!(
+            tag_s!("{"),
+            separated_nonempty_list!(tag_s!(","), actual_parameter),
+            tag_s!("}"))));
+
+/// Parser for `DefinedValue` as defined in X.680 §14.1.
+named!(
+    defined_value<&str, DefinedValue>,
+    asn_ws!(
+        do_parse!(
+            mod_ref: opt!(terminated!(modulereference, tag_s!("."))) >>
+            val_ref: valuereference >>
+            param_val: opt!(actual_parameter_list) >>
+            (DefinedValue::new(mod_ref, val_ref, param_val.unwrap_or_else(Vec::new))))));
+
+named!(
+    named_bit<&str, NamedBit>,
+    map!(
+        asn_ws!(
+            tuple!(
+                identifier,
+                delimited!(
+                    tag_s!("("),
+                    alt!(number => { |num| NamedBitValue::Num(num) } |
+                         defined_value => { |val| NamedBitValue::Ref(val) }),
+                    tag_s!(")")
+                )
+            )
+        ),
+        NamedBit::new_tuple));
+
+/// Parser for `BitStringType` as defined by X.680 §22.1.
+named!(
+    bitstring_type<&str, Vec<NamedBit> >,
+    asn_ws!(
+        do_parse!(
+            tag_s!("BIT") >>
+            tag_s!("STRING") >>
+            bit_list: opt!(
+                delimited!(
+                    tag_s!("{"),
+                    separated_nonempty_list!(
+                        tag_s!(","),
+                        named_bit),
+                    tag_s!("}"))) >>
+            (bit_list.unwrap_or(vec![])))));
+
 #[cfg(test)]
 mod tests {
     #[cfg_attr(rustfmt, rustfmt_skip)]
     use super::*;
     use types;
+    use types::{Identifier, ValueReference};
     use types::DefinitiveObjIdComponent::NumberForm;
     use types::ArcIdentifier::IntegerLabel;
     use nom::{IResult, Needed, ErrorKind};
@@ -242,5 +302,26 @@ mod tests {
                 plain_sym("OPERATION"),
                 plain_sym("ERROR"),
                 param_sym("Rose-PDU")])));
+    }
+
+    #[test]
+    fn test_bitstring_type() {
+        fn num_bit(name: &str, num: u64) -> NamedBit {
+            NamedBit::new(Identifier::new(name), NamedBitValue::Num(num))
+        }
+
+        fn ref_bit(name: &str, ref_name: &str) -> NamedBit {
+            NamedBit::new(
+                Identifier::new(name),
+                NamedBitValue::Ref(DefinedValue::new_val(ValueReference::new(ref_name))),
+            )
+        }
+
+        // Exclamation to indicate no parameters
+        assert_eq!(bitstring_type("BIT STRING !"), Done("!", vec![]));
+        assert_eq!(bitstring_type("BIT   \nSTRING!"), Done("!", vec![]));
+
+        assert_eq!(bitstring_type("BIT   \nSTRING { a(3), b(a) }"),
+                   done(vec![num_bit("a", 3), ref_bit("b", "a")]));
     }
 }
