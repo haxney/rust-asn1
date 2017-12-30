@@ -4,7 +4,7 @@ use lexer::{number, identifier, identifier_str, modulereference, whitespace,
             noninteger_unicode_label, typereference_str, typereference_upper_str, valuereference};
 use types::{ModuleIdentifier, DefinitiveObjIdComponent, DefinitiveIdentification, ArcIdentifier,
             UnresolvedSymbol, Exports, NamedBit, NamedBitValue, DefinedValue, ActualParameter,
-            BuiltinType, CharacterString};
+            BuiltinType, CharacterString, Type, NamedType, Choice};
 
 named!(definitive_oid_component<&str, DefinitiveObjIdComponent>,
     alt!(
@@ -158,6 +158,33 @@ named!(
         asn_ws!(tuple!(tag_s!("CHARACTER"), tag_s!("STRING"))) => {
             |_| CharacterString::UnrestrictedString }));
 
+/// Parser for `NamedType` as defined in X.680 §17.5.
+named!(
+    named_type<&str, NamedType>,
+    map!(asn_ws!(tuple!(identifier, parse_type)), NamedType::new_tuple));
+
+// named!(
+//     choice_ext<&str, ChoiceExtension>,
+//     asn_ws!(
+//         do_parse!(
+//             tag_s!(",") >>
+
+//             extension_exception:
+//         )
+// )
+// );
+
+// named!(
+//     choice<&str, Choice>,
+//     asn_ws!(
+//         do_parse!(
+//             tag_s!("CHOICE") >>
+//             tag_s!("{") >>
+//             root_alternatives: separated_nonempty_list!(tag_s!(","), named_type) >>
+//             ext: opt!() >>
+//             tag_s!("}") >>
+//             (Choice::new(root_alternatives, ext)))));
+
 named!(
     builtin_type<&str, BuiltinType>,
     alt_complete!(
@@ -166,6 +193,12 @@ named!(
         character_string => { |str_type| BuiltinType::CharacterStringType(str_type) }
     )
 );
+
+/// Parser for `Type` syntactic item.
+named!(
+    parse_type<&str, Type>,
+    // Placeholder for now.
+    alt!(builtin_type => { |ty| Type::Builtin(ty) }));
 
 #[cfg(test)]
 mod tests {

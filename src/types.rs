@@ -391,6 +391,69 @@ pub enum CharacterString {
     UnrestrictedString,
 }
 
+/// NamedType structure as defined in X.680 §17.5.
+#[derive(Debug, Eq, PartialEq)]
+pub struct NamedType {
+    name: Identifier,
+
+    /// This does not need to be boxed because any recursive which would contain this already have
+    /// indirection, such as the elements of a `ChoiceType` being in a `Vec`.
+    ty: Type
+}
+
+impl NamedType {
+    pub fn new(ident: Identifier, ty: Type) -> NamedType {
+        NamedType {
+            name: ident,
+            ty: ty,
+        }
+    }
+
+    pub fn new_tuple((ident, ty): (Identifier, Type)) -> NamedType {
+        NamedType::new(ident, ty)
+    }
+}
+
+/// An ExceptionIdentification type as defined in X.680 §53.4.
+#[derive(Debug, Eq, PartialEq)]
+pub enum ExceptionIdentification {
+    SignedNumber(i64),
+    DefinedVal(DefinedValue),
+    TypeVal(Type, Value)
+}
+
+/// An `ExtensionAdditionAlternative` type as defined in X.680 §29.1.
+#[derive(Debug, Eq, PartialEq)]
+pub enum ExtensionAlternative {
+    /// `ExtensionAdditionAlternativesGroup` with a `VersionNumber` and `AlternativeTypeList`.
+    Group(Option<u64>, Vec<NamedType>),
+    Named(NamedType)
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct ChoiceExtension {
+    /// The `ExtensionAndException` parse type. Boxed to prevent recursive datatype.
+    exception: Option<Box<ExceptionIdentification>>,
+    extension_addition: Vec<ExtensionAlternative>,
+    extension_marker: bool
+}
+
+/// A `Choice` type as defined in X.680 §29.
+#[derive(Debug, Eq, PartialEq)]
+pub struct Choice {
+    root_alternatives: Vec<NamedType>,
+    extension: Option<ChoiceExtension>,
+}
+
+impl Choice {
+    pub fn new(root: Vec<NamedType>, extension: Option<ChoiceExtension>) -> Choice {
+        Choice {
+            root_alternatives: root,
+            extension: extension
+        }
+    }
+}
+
 #[derive(Debug, Eq, PartialEq)]
 pub enum BuiltinType {
     /// BitString type as defined in X.680 §22.1.
@@ -401,7 +464,9 @@ pub enum BuiltinType {
 
     /// CharacterString type as defined in X.680 §40.1.
     CharacterStringType(CharacterString),
-    ChoiceType,
+
+    /// X.680 §29
+    ChoiceType(Choice),
     DateType,
     DateTimeType,
     DurationType,
@@ -453,4 +518,8 @@ pub enum Type {
     Builtin(BuiltinType),
     Referenced(ReferencedType),
     Constrained(ConstrainedType),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum Value {
 }
